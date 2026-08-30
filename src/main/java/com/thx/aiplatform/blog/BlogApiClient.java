@@ -1,5 +1,7 @@
 package com.thx.aiplatform.blog;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -9,7 +11,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -19,9 +22,11 @@ class BlogApiClient {
 
     private final BlogAssistantProperties properties;
     private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
 
-    BlogApiClient(BlogAssistantProperties properties) {
+    BlogApiClient(BlogAssistantProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
+        this.objectMapper = objectMapper;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(properties.getConnectTimeout())
                 .build();
@@ -38,12 +43,26 @@ class BlogApiClient {
         return execute(request);
     }
 
-    String postForm(String endpoint, Map<String, String> parameters) {
-        HttpRequest request = requestBuilder(endpointUrl(endpoint))
-                .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                .POST(HttpRequest.BodyPublishers.ofString(encodeForm(parameters), StandardCharsets.UTF_8))
-                .build();
-        return execute(request);
+    String publish(BlogPublicationRequest publication) {
+        Map<String, Object> body = Map.ofEntries(
+                Map.entry("title", publication.title()),
+                Map.entry("contentMd", publication.contentMd()),
+                Map.entry("categoryId", publication.categoryId() == null ? "1" : publication.categoryId()),
+                Map.entry("tagIds", splitTagIds(publication.tagIds())),
+                Map.entry("description", valueOrEmpty(publication.description())),
+                Map.entry("keywords", valueOrEmpty(publication.keywords())),
+                Map.entry("coverImage", valueOrEmpty(publication.coverImage())),
+                Map.entry("author", publication.author() == null ? "AI Assistant" : publication.author())
+        );
+        try {
+            HttpRequest request = requestBuilder(endpointUrl("/articles"))
+                    .header("Content-Type", "application/json; charset=UTF-8")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body), StandardCharsets.UTF_8))
+                    .build();
+            return execute(request);
+        } catch (JsonProcessingException exception) {
+            throw new BlogApiException("无法生成博客发布请求", exception);
+        }
     }
 
     private HttpRequest.Builder requestBuilder(String url) {
@@ -92,17 +111,18 @@ class BlogApiClient {
         }
     }
 
-    static Map<String, String> publicationParameters(BlogPublicationRequest request) {
-        Map<String, String> parameters = new LinkedHashMap<>();
-        parameters.put("title", request.title());
-        parameters.put("contentMd", request.contentMd());
-        if (request.categoryId() != null) parameters.put("categoryId", request.categoryId().toString());
-        if (request.tagIds() != null) parameters.put("tagIds", request.tagIds());
-        if (request.description() != null) parameters.put("description", request.description());
-        if (request.keywords() != null) parameters.put("keywords", request.keywords());
-        if (request.coverImage() != null) parameters.put("coverImage", request.coverImage());
-        parameters.put("author", request.author() == null ? "AI Assistant" : request.author());
-        return parameters;
+    private List<String> splitTagIds(String tagIds) {
+        if (tagIds == null || tagIds.isBlank()) return List.of();
+        return Arrays.stream(tagIds.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .distinct()
+                .limit(10)
+                .toList();
+    }
+
+    private String valueOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     static class BlogApiException extends RuntimeException {

@@ -12,28 +12,26 @@ import static org.mockito.Mockito.when;
 class BlogQueryToolsTest {
 
     @Test
-    void 详情压缩不会误删文章标签() throws Exception {
+    void 详情接口直接透传精简响应() throws Exception {
         BlogApiClient apiClient = mock(BlogApiClient.class);
-        when(apiClient.get("/getBlogDetailById", Map.of("id", "7"))).thenReturn("""
+        when(apiClient.get("/articles/7")).thenReturn("""
                 {"data":{"id":7,"title":"测试","tags":[{"id":1},{"id":2}]}}
                 """);
-        BlogQueryTools tools = new BlogQueryTools(apiClient, new ObjectMapper());
+        BlogQueryTools tools = new BlogQueryTools(apiClient);
 
-        String result = tools.getBlogDetailById(7);
+        String result = tools.getBlogDetail("7");
 
         assertThat(new ObjectMapper().readTree(result).path("data").path("tags")).hasSize(2);
     }
 
     @Test
-    void 最新文章结果受请求数量限制() throws Exception {
+    void 博客概览限制最新文章请求数量() {
         BlogApiClient apiClient = mock(BlogApiClient.class);
-        when(apiClient.get("/getRecentBlogs", Map.of("pageSize", "2"))).thenReturn("""
-                {"data":[{"id":1},{"id":2},{"id":3}]}
-                """);
-        BlogQueryTools tools = new BlogQueryTools(apiClient, new ObjectMapper());
+        when(apiClient.get("/overview", Map.of("recentLimit", "10"))).thenReturn("{\"data\":{}}");
+        BlogQueryTools tools = new BlogQueryTools(apiClient);
 
-        String result = tools.getRecentBlogs(2);
+        String result = tools.getBlogOverview(99);
 
-        assertThat(new ObjectMapper().readTree(result).path("data")).hasSize(2);
+        assertThat(result).isEqualTo("{\"data\":{}}");
     }
 }

@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,7 +29,11 @@ class BlogAssistantControllerTest {
         BlogAssistantService service = mock(BlogAssistantService.class);
         when(service.stream(any())).thenReturn(Flux.just("这是", "博客回答"));
         BlogAssistantProperties properties = new BlogAssistantProperties();
-        BlogAssistantController controller = new BlogAssistantController(service, properties);
+        BlogPublicationService publicationService = mock(BlogPublicationService.class);
+        when(publicationService.findForConversation("session-1")).thenReturn(new PendingPublicationView(
+                "action-1", "待发布文章", "摘要", "category-1", "tag-1", 1200,
+                Instant.parse("2026-08-31T00:15:00Z"), "PENDING_APPROVAL"));
+        BlogAssistantController controller = new BlogAssistantController(service, properties, publicationService);
         MockMvc mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setMessageConverters(
                         new StringHttpMessageConverter(StandardCharsets.UTF_8),
@@ -49,6 +54,8 @@ class BlogAssistantControllerTest {
         mockMvc.perform(asyncDispatch(pending))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("data:这是")))
+                .andExpect(content().string(containsString("event:action")))
+                .andExpect(content().string(containsString("待发布文章")))
                 .andExpect(content().string(containsString("data:[DONE]")));
     }
 }

@@ -3,20 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Platform</title>
+    <title>THX AI Platform</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <style>
-        body { max-width: 760px; margin: 80px auto; padding: 0 24px; font-family: "Microsoft YaHei", sans-serif; color: #172033; }
-        a { color: #2563eb; }
-        code { padding: 2px 6px; border-radius: 5px; background: #f1f5f9; }
+        :root { color-scheme: light; --text: #172033; --muted: #627086; --line: rgba(112,134,166,.18); --accent: #2563eb; }
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; margin: 0; color: var(--text); background: linear-gradient(145deg,#e9eef7 0%,#f7faff 46%,#eef5ff 100%); font-family: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
+        body::before { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(circle at 12% 12%,rgba(96,165,250,.18),transparent 32%),radial-gradient(circle at 88% 80%,rgba(129,140,248,.14),transparent 34%); content: ""; }
+        main { position: relative; width: min(1080px,calc(100% - 40px)); margin: 0 auto; padding: clamp(64px,10vw,120px) 0 56px; }
+        .eyebrow { margin: 0 0 14px; color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+        h1 { max-width: 720px; margin: 0; font-size: clamp(38px,6vw,68px); line-height: 1.06; letter-spacing: -.045em; }
+        .lead { max-width: 650px; margin: 22px 0 42px; color: var(--muted); font-size: clamp(16px,2vw,19px); line-height: 1.75; }
+        .assistant-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap: 18px; }
+        .assistant-card { position: relative; display: flex; min-height: 250px; flex-direction: column; padding: 26px; border: 1px solid rgba(255,255,255,.82); border-radius: 22px; color: inherit; background: rgba(255,255,255,.66); box-shadow: 0 18px 48px rgba(61,78,110,.09); text-decoration: none; backdrop-filter: blur(18px); transition: transform .2s,box-shadow .2s,border-color .2s; }
+        .assistant-card[href]:hover { transform: translateY(-5px); border-color: rgba(96,132,190,.32); box-shadow: 0 24px 58px rgba(48,72,112,.14); }
+        .card-icon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(135deg,#2563eb,#60a5fa); font-size: 18px; font-weight: 750; box-shadow: 0 10px 24px rgba(37,99,235,.22); }
+        .blog .card-icon { background: linear-gradient(135deg,#111827,#4b5563); box-shadow: 0 10px 24px rgba(17,24,39,.2); }
+        .server .card-icon { background: linear-gradient(135deg,#0f766e,#2dd4bf); box-shadow: 0 10px 24px rgba(13,148,136,.2); }
+        .assistant-card h2 { margin: 26px 0 8px; font-size: 20px; }
+        .assistant-card p { margin: 0; color: var(--muted); line-height: 1.65; }
+        .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 24px; color: var(--accent); font-size: 13px; font-weight: 650; }
+        .server .card-footer { color: #0f766e; }
+        .status { padding: 5px 8px; border-radius: 999px; color: #687386; background: rgba(123,137,158,.12); font-size: 11px; font-weight: 600; }
+        footer { margin-top: 30px; color: #8390a3; font-size: 12px; }
+        @media (max-width:600px) { main { width: min(100% - 28px,1080px); padding-top: 48px; } .lead { margin-bottom: 30px; } .assistant-card { min-height: 220px; } }
     </style>
 </head>
 <body>
-<h1>AI Platform</h1>
-<p>个人项目统一 AI 平台正在建设中。</p>
-<p><a href="/preview/website-assistant.html">打开网站助手组件预览</a></p>
-<p><a href="/blog/assistant/">打开博客后台助手</a></p>
-<p>公开接口：<code>POST /api/public/v1/website/messages</code></p>
-<p>生产域名：<code>https://ai.thxdxw.cn</code></p>
+<main>
+    <p class="eyebrow">THX AI PLATFORM</p>
+    <h1>一个入口，连接我的所有 AI 助手</h1>
+    <p class="lead">统一管理模型、权限和工具，每个助手只访问它所属项目的能力。</p>
+    <section class="assistant-grid" aria-label="助手列表">
+        <a class="assistant-card website" href="/preview/website-assistant.html">
+            <span class="card-icon">W</span>
+            <h2>网站助手</h2>
+            <p>回答首页网站、个人项目和站点功能相关的问题。</p>
+            <span class="card-footer"><span>打开预览</span><span>→</span></span>
+        </a>
+        <a class="assistant-card blog" href="/blog/assistant/">
+            <span class="card-icon">B</span>
+            <h2>博客助手</h2>
+            <p>查询已有内容、规划选题、撰写 Markdown，并在对话中确认发布。</p>
+            <span class="card-footer"><span>进入助手</span><span>→</span></span>
+        </a>
+        <article class="assistant-card server">
+            <span class="card-icon">S</span>
+            <h2>服务器助手</h2>
+            <p>查看运行状态、分析日志，并通过受控操作处理服务器任务。</p>
+            <span class="card-footer"><span class="status">规划中</span></span>
+        </article>
+    </section>
+    <footer>ai.thxdxw.cn · 个人 AI 能力中心</footer>
+</main>
 </body>
 </html>

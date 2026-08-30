@@ -31,36 +31,34 @@ public class BlogPublicationService {
         this.clock = clock;
     }
 
-    public PendingPublicationView prepare(BlogPublicationRequest rawRequest) {
+    public PendingPublicationView prepare(String conversationId, BlogPublicationRequest rawRequest) {
         cleanupExpired();
+        cancelForConversation(conversationId);
         if (pendingActions.size() >= MAX_PENDING_ACTIONS) {
-            throw new IllegalStateException("待审批发布任务过多，请稍后重试");
+            throw new IllegalStateException("待确认发布选项过多，请稍后重试");
         }
 
+        validate(rawRequest);
         BlogPublicationRequest request = rawRequest.normalized();
         String actionId = UUID.randomUUID().toString();
         Instant expiresAt = clock.instant().plus(properties.getApprovalTtl());
-        PendingPublication pending = new PendingPublication(actionId, request, expiresAt);
+        PendingPublication pending = new PendingPublication(actionId, conversationId, request, expiresAt);
         pendingActions.put(actionId, pending);
         return toView(pending);
     }
 
-    public PublicationResult approve(String actionId, String confirmation) {
-        if (!"发布".equals(confirmation)) {
-            throw new IllegalArgumentException("必须输入“发布”才能确认操作");
-        }
-
+    public PublicationResult approve(String actionId) {
         // 先原子移除再调用上游，避免双击或并发请求重复发布同一篇文章。
         PendingPublication pending = pendingActions.remove(actionId);
         if (pending == null) {
-            throw new IllegalArgumentException("待审批任务不存在或已处理");
+            throw new IllegalArgumentException("发布选项不存在或已处理");
         }
         if (!pending.expiresAt().isAfter(clock.instant())) {
-            throw new IllegalArgumentException("待审批任务已过期，请重新创建");
+            throw new IllegalArgumentException("发布选项已过期，请重新生成文章");
         }
 
         try {
-            String response = apiClient.postForm("/publishBlog", BlogApiClient.publicationParameters(pending.request()));
+            String response = apiClient.publish(pending.request());
             return new PublicationResult(actionId, true, "博客已发布", truncate(response));
         } catch (RuntimeException exception) {
             // 网络异常时无法判断上游是否已接收，禁止自动重试以免形成重复文章。
@@ -82,12 +80,31 @@ public class BlogPublicationService {
         return toView(pending);
     }
 
+    PendingPublicationView findForConversation(String conversationId) {
+        cleanupExpired();
+        return pendingActions.values().stream()
+                .filter(pending -> pending.conversationId().equals(conversationId))
+                .findFirst()
+                .map(this::toView)
+                .orElse(null);
+    }
+
+    public void cancel(String actionId) {
+        pendingActions.remove(actionId);
+    }
+
+    void cancelForConversation(String conversationId) {
+        pendingActions.entrySet().removeIf(entry -> entry.getValue().conversationId().equals(conversationId));
+    }
+
     private PendingPublicationView toView(PendingPublication pending) {
         BlogPublicationRequest request = pending.request();
         return new PendingPublicationView(
                 pending.actionId(),
                 request.title(),
                 request.description(),
+                request.categoryId(),
+                request.tagIds(),
                 request.contentMd().length(),
                 pending.expiresAt(),
                 "PENDING_APPROVAL"
@@ -99,6 +116,18 @@ public class BlogPublicationService {
         pendingActions.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(now));
     }
 
+    private void validate(BlogPublicationRequest request) {
+        if (request == null || request.title() == null || request.title().isBlank()) {
+            throw new IllegalArgumentException("文章标题不能为空");
+        }
+        if (request.contentMd() == null || request.contentMd().isBlank()) {
+            throw new IllegalArgumentException("Markdown 正文不能为空");
+        }
+        if (request.title().length() > 200 || request.contentMd().length() > 100_000) {
+            throw new IllegalArgumentException("发布内容超过允许长度");
+        }
+    }
+
     private String truncate(String response) {
         if (response == null || response.length() <= UPSTREAM_RESPONSE_LIMIT) {
             return response;
@@ -108,6 +137,7 @@ public class BlogPublicationService {
 
     private record PendingPublication(
             String actionId,
+            String conversationId,
             BlogPublicationRequest request,
             Instant expiresAt
     ) {

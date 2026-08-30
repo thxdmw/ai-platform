@@ -15,12 +15,13 @@ import static org.mockito.Mockito.when;
 class BlogAssistantServiceTest {
 
     @Test
-    void 博客助手固定身份并且只装配查询工具() {
+    void 博客助手固定身份并装配查询与发布选项工具() {
         AssistantChatGateway gateway = mock(AssistantChatGateway.class);
         BlogQueryTools queryTools = mock(BlogQueryTools.class);
+        BlogPublicationService publicationService = mock(BlogPublicationService.class);
         when(gateway.stream(any(AssistantChatCommand.class), any(Object[].class)))
                 .thenReturn(Flux.just("回答"));
-        BlogAssistantService service = new BlogAssistantService(gateway, queryTools);
+        BlogAssistantService service = new BlogAssistantService(gateway, queryTools, publicationService);
 
         assertThat(service.stream(new BlogChatRequest("session-1", " 查询最新文章 ")).blockLast())
                 .isEqualTo("回答");
@@ -30,6 +31,9 @@ class BlogAssistantServiceTest {
         verify(gateway).stream(command.capture(), tools.capture());
         assertThat(command.getValue().assistantId()).isEqualTo("blog-admin");
         assertThat(command.getValue().userMessage()).isEqualTo("查询最新文章");
-        assertThat(tools.getValue()).containsExactly(queryTools);
+        assertThat(tools.getValue()).hasSize(2);
+        assertThat(tools.getValue()[0]).isSameAs(queryTools);
+        assertThat(tools.getValue()[1]).isInstanceOf(BlogPublicationTool.class);
+        verify(publicationService).cancelForConversation("session-1");
     }
 }

@@ -1,10 +1,8 @@
 package com.thx.aiplatform.blog;
 
-import jakarta.validation.Valid;
-import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -18,16 +16,13 @@ public class BlogPublicationController {
         this.publicationService = publicationService;
     }
 
-    @PostMapping
-    public ResponseEntity<PendingPublicationView> prepare(@Valid @RequestBody BlogPublicationRequest request) {
-        return ResponseEntity.accepted().body(publicationService.prepare(request));
+    @PostMapping("/{actionId}/approve")
+    public PublicationResult approve(@PathVariable String actionId) {
+        return publicationService.approve(actionId);
     }
 
-    @PostMapping("/{actionId}/approve")
-    public PublicationResult approve(
-            @PathVariable String actionId,
-            @Valid @RequestBody BlogApprovalRequest request
-    ) {
-        return publicationService.approve(actionId, request.confirmation());
+    @DeleteMapping("/{actionId}")
+    public void cancel(@PathVariable String actionId) {
+        publicationService.cancel(actionId);
     }
 }

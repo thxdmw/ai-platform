@@ -27,10 +27,13 @@ public class BlogAssistantController {
 
     private final BlogAssistantService assistantService;
     private final BlogAssistantProperties properties;
+    private final BlogPublicationService publicationService;
 
-    public BlogAssistantController(BlogAssistantService assistantService, BlogAssistantProperties properties) {
+    public BlogAssistantController(BlogAssistantService assistantService, BlogAssistantProperties properties,
+                                   BlogPublicationService publicationService) {
         this.assistantService = assistantService;
         this.properties = properties;
+        this.publicationService = publicationService;
     }
 
     @PostMapping(
@@ -43,7 +46,7 @@ public class BlogAssistantController {
         AtomicBoolean terminated = new AtomicBoolean(false);
         AtomicInteger contentLength = new AtomicInteger();
 
-        emitter.onTimeout(() -> terminate(emitter, terminated, UNAVAILABLE_ANSWER));
+        emitter.onTimeout(() -> terminate(emitter, terminated, UNAVAILABLE_ANSWER, null));
         emitter.onError(error -> terminated.set(true));
         emitter.onCompletion(() -> terminated.set(true));
 
@@ -51,9 +54,14 @@ public class BlogAssistantController {
                 chunk -> sendChunk(emitter, terminated, contentLength, chunk),
                 error -> {
                     log.error("博客助手模型调用失败，conversationId={}", request.conversationId(), error);
-                    terminate(emitter, terminated, UNAVAILABLE_ANSWER);
+                    terminate(emitter, terminated, UNAVAILABLE_ANSWER, null);
                 },
-                () -> terminate(emitter, terminated, contentLength.get() == 0 ? EMPTY_ANSWER : null)
+                () -> terminate(
+                        emitter,
+                        terminated,
+                        contentLength.get() == 0 ? EMPTY_ANSWER : null,
+                        publicationService.findForConversation(request.conversationId())
+                )
         );
         return emitter;
     }
@@ -71,10 +79,16 @@ public class BlogAssistantController {
         }
     }
 
-    private void terminate(SseEmitter emitter, AtomicBoolean terminated, String finalMessage) {
+    private void terminate(SseEmitter emitter, AtomicBoolean terminated, String finalMessage,
+                           PendingPublicationView publication) {
         if (!terminated.compareAndSet(false, true)) return;
         try {
             if (finalMessage != null) emitter.send(SseEmitter.event().data(finalMessage, UTF8_TEXT));
+            if (publication != null) {
+                emitter.send(SseEmitter.event()
+                        .name("action")
+                        .data(publication, MediaType.APPLICATION_JSON));
+            }
             emitter.send(SseEmitter.event().data(DONE_MARKER, UTF8_TEXT));
             emitter.complete();
         } catch (IOException exception) {

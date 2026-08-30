@@ -12,7 +12,7 @@ home-page
 ai-platform
   ├─ platform：模型与共享契约
   ├─ website：网站知识、接口、CORS、限流
-  ├─ blog：博客查询、访问控制、发布审批
+  ├─ blog：博客查询、访问控制、对话内发布确认
   └─ server：服务器助手边界
 ```
 
@@ -37,13 +37,13 @@ ai-platform
 → Bearer 访问口令校验
 → POST /api/blog/v1/messages
 → BlogAssistantService
-→ AssistantChatGateway + BlogQueryTools（只读）
+→ AssistantChatGateway + BlogQueryTools（只读）+ BlogPublicationTool（只生成选项）
 → 博客 Agent 查询 API / 当前模型
 → SSE 文本片段
 ```
 
-发布文章不作为模型工具暴露。页面提交结构化草稿后，服务端创建 15 分钟有效的一次性
-待审批任务；管理员输入“发布”并调用审批接口后，服务端才访问博客发布 API。任务会在
+模型只能通过发布候选工具生成 15 分钟有效的一次性发布选项，不能直接写入博客。
+选项随 SSE 回复显示在消息下方；管理员点击“发布”后，服务端才访问博客发布 API。选项会在
 调用上游前原子消费，避免重复点击造成重复文章。
 
 ## 后续演进

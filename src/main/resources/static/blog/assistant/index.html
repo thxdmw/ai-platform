@@ -6,6 +6,8 @@
     <title>博客助手 · AI Platform</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="./app.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
     <script src="./app.js" defer></script>
 </head>
 <body>
@@ -25,10 +27,6 @@
                 <button class="nav-item active" type="button">
                     <svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2"/></svg>
                     对话
-                </button>
-                <button id="sidebarPublishButton" class="nav-item" type="button">
-                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                    发布文章
                 </button>
             </nav>
             <section class="chat-history-section">
@@ -58,8 +56,7 @@
         </button>
         <section class="chat-view">
             <header class="view-header">
-                <div><h1 class="view-title">智能博客助手</h1><p class="view-subtitle">查询、选题与 Markdown 草稿</p></div>
-                <button id="headerPublishButton" class="header-action-btn" type="button">发布文章</button>
+                <div><h1 class="view-title">智能博客助手</h1><p class="view-subtitle">查询、写作与对话内发布</p></div>
             </header>
             <div id="chatContainer" class="chat-container centered">
                 <div id="welcome" class="welcome-greeting">
@@ -82,7 +79,7 @@
                             </button>
                         </div>
                     </div>
-                    <p class="composer-tip">AI 只能准备内容，发布仍需在服务端审批。</p>
+                    <p class="composer-tip">发布文章时，我会在对话中给出确认选项。</p>
                 </div>
             </div>
         </section>
@@ -99,39 +96,6 @@
         <p id="loginError" class="form-error" role="alert"></p>
         <button class="primary-button" type="submit">验证并进入</button>
     </form>
-</div>
-
-<div id="publishOverlay" class="modal-overlay" hidden>
-    <section class="publish-dialog" role="dialog" aria-modal="true" aria-labelledby="publishTitle">
-        <header class="dialog-header">
-            <div><h2 id="publishTitle">发布文章</h2><p>先创建待审批任务，确认后才会调用博客系统。</p></div>
-            <button id="closePublish" class="icon-button" type="button" aria-label="关闭">×</button>
-        </header>
-        <form id="publicationForm" class="publication-form">
-            <label class="field field-wide">标题<input id="publicationTitle" maxlength="200" required></label>
-            <label class="field field-wide">Markdown 正文<textarea id="publicationContent" rows="14" maxlength="100000" required></textarea></label>
-            <label class="field">分类 ID<input id="publicationCategory" type="number" min="1" placeholder="可选"></label>
-            <label class="field">标签 ID<input id="publicationTags" maxlength="500" placeholder="例如 1,2,3"></label>
-            <label class="field field-wide">摘要<textarea id="publicationDescription" rows="3" maxlength="500"></textarea></label>
-            <label class="field">关键词<input id="publicationKeywords" maxlength="500" placeholder="逗号分隔"></label>
-            <label class="field">作者<input id="publicationAuthor" maxlength="100" value="AI Assistant"></label>
-            <label class="field field-wide">封面地址<input id="publicationCover" type="url" maxlength="2048"></label>
-            <div class="form-actions field-wide">
-                <button id="useLatestAnswer" class="secondary-button" type="button">使用最后一条 AI 回复</button>
-                <button class="primary-button" type="submit">创建待审批任务</button>
-            </div>
-        </form>
-        <section id="approvalPanel" class="approval-panel" hidden>
-            <span class="approval-badge">等待审批</span>
-            <h3 id="approvalTitle"></h3>
-            <p id="approvalSummary"></p>
-            <label>输入“发布”确认<input id="approvalConfirmation" autocomplete="off"></label>
-            <div class="form-actions">
-                <button id="backToEdit" class="secondary-button" type="button">返回编辑</button>
-                <button id="approvePublication" class="danger-button" type="button" disabled>确认发布</button>
-            </div>
-        </section>
-    </section>
 </div>
 
 <div id="toast" class="toast" role="status" hidden></div>

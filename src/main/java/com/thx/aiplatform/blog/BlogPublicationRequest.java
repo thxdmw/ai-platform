@@ -1,7 +1,5 @@
 package com.thx.aiplatform.blog;
 
-import jakarta.validation.constraints.Max;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
@@ -14,9 +12,8 @@ public record BlogPublicationRequest(
         @Size(max = 100_000, message = "Markdown 正文不能超过 100000 个字符")
         String contentMd,
 
-        @Min(value = 1, message = "分类 ID 必须大于 0")
-        @Max(value = Integer.MAX_VALUE, message = "分类 ID 不合法")
-        Integer categoryId,
+        @Size(max = 64, message = "分类 ID 不能超过 64 个字符")
+        String categoryId,
 
         @Size(max = 500, message = "标签 ID 不能超过 500 个字符")
         String tagIds,
