@@ -40,7 +40,7 @@ steps:
         - |
           if [ ! -d "/app/ai-platform/ai-platform/.git" ]; then
             echo "首次部署：从 GitHub 克隆仓库"
-            sudo git clone --origin origin --branch master https://github.com/thxdmw/ai-platform.git /app/ai-platform/ai-platform
+            sudo git clone --origin origin --branch master https://gitee.com/thxdmw/ai-platform.git /app/ai-platform/ai-platform
           fi
         - cd /app/ai-platform/ai-platform
         - sudo git fetch --prune origin master
