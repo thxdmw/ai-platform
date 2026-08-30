@@ -1,0 +1,10 @@
+.git
+.idea
+.env
+.env.*
+!.env.example
+target
+logs
+*.iml
+*.log
+docs

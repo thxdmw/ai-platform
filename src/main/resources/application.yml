@@ -1,0 +1,48 @@
+server:
+  port: ${SERVER_PORT:9900}
+  forward-headers-strategy: framework
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
+spring:
+  application:
+    name: ai-platform
+  ai:
+    model:
+      chat: ${AI_CHAT_PROVIDER:ollama}
+    ollama:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      chat:
+        options:
+          model: ${OLLAMA_CHAT_MODEL:qwen3.5:9b}
+          temperature: 0.2
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:}
+      chat:
+        options:
+          model: ${DEEPSEEK_CHAT_MODEL:deepseek-chat}
+          temperature: 0.2
+
+ai-platform:
+  website:
+    # 公开接口只能被明确列出的首页来源调用，多个来源通过逗号分隔。
+    allowed-origins: ${WEBSITE_ASSISTANT_ALLOWED_ORIGINS:http://localhost:9900,http://localhost:8080,http://127.0.0.1:8080,https://thxdxw.cn}
+    requests-per-minute: ${WEBSITE_ASSISTANT_REQUESTS_PER_MINUTE:20}
+    sse-timeout: ${WEBSITE_ASSISTANT_SSE_TIMEOUT:90s}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: INFO
+    com.thx.aiplatform: INFO

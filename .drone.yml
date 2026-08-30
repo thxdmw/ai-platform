@@ -1,0 +1,53 @@
+kind: pipeline
+name: ai-platform-drone
+
+platform:
+  os: linux
+  arch: amd64
+
+steps:
+  - name: verify-backend
+    image: maven:3.9.11-eclipse-temurin-21
+    commands:
+      # 新仓库不依赖数据库服务；完整测试通过后才允许部署。
+      - mvn clean verify -B -ntp
+
+  - name: verify-widget
+    image: node:22-alpine
+    commands:
+      - node --check src/main/resources/static/widgets/website-assistant/widget.js
+
+  - name: deploy
+    image: appleboy/drone-ssh
+    depends_on:
+      - verify-backend
+      - verify-widget
+    settings:
+      host:
+        from_secret: ssh_host
+      port:
+        from_secret: ssh_port
+      username:
+        from_secret: ssh_username
+      password:
+        from_secret: ssh_password
+      command_timeout: 30m
+      script:
+        - set -eu
+        - sudo mkdir -p /app/ai-platform
+        - |
+          if [ ! -d "/app/ai-platform/ai-platform/.git" ]; then
+            echo "首次部署：从 GitHub 克隆仓库"
+            sudo git clone --origin origin --branch master https://github.com/thxdmw/ai-platform.git /app/ai-platform/ai-platform
+          fi
+        - cd /app/ai-platform/ai-platform
+        - sudo git fetch --prune origin master
+        # 部署本次通过验证的精确提交，避免部署期间分支前移造成代码不一致。
+        - sudo git checkout --force --detach ${DRONE_COMMIT_SHA}
+        - sudo env DEPLOY_RELEASE_TAG=${DRONE_COMMIT_SHA} bash ./deploy.sh
+
+trigger:
+  event:
+    - push
+  branch:
+    - master

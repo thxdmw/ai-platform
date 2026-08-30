@@ -1,0 +1,13 @@
+services:
+  ai-platform:
+    build: .
+    image: ai-platform:latest
+    container_name: ai-platform-container
+    env_file:
+      - .env
+    ports:
+      - "${SERVER_PORT:-20005}:${SERVER_PORT:-20005}"
+    restart: unless-stopped
+    extra_hosts:
+      # 本地 Ollama 运行在宿主机时可通过该地址访问；DeepSeek 模式不会使用它。
+      - "host.docker.internal:host-gateway"
