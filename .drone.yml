@@ -17,6 +17,7 @@ steps:
     commands:
       - node --check src/main/resources/static/widgets/website-assistant/widget.js
       - node --check src/main/resources/static/blog/assistant/app.js
+      - node --check src/main/resources/static/server/assistant/app.js
 
   - name: deploy
     image: appleboy/drone-ssh

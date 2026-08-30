@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <title>服务器助手 · AI Platform</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/blog/assistant/app.css">
+    <link rel="stylesheet" href="./app.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js"></script>
+    <script src="./app.js" defer></script>
+</head>
+<body>
+<div class="app-layout">
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    <aside id="sidebar" class="sidebar server-sidebar">
+        <button id="closeSidebar" class="sidebar-close-btn" type="button" aria-label="关闭侧边栏">×</button>
+        <div class="sidebar-header">
+            <div class="sidebar-brand"><span class="brand-icon">S</span><span class="sidebar-title">服务器助手</span></div>
+        </div>
+        <div class="sidebar-content">
+            <button id="newChatButton" class="new-chat-btn" type="button">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span>新建对话</span>
+            </button>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" type="button">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2"/></svg>
+                    对话
+                </button>
+            </nav>
+            <section class="server-list-section">
+                <div class="history-header"><span>已配置服务器</span></div>
+                <div id="serverList" class="server-list"><p class="empty-note">登录后读取</p></div>
+            </section>
+            <section class="chat-history-section">
+                <div class="history-header"><span>近期对话</span></div>
+                <div id="historyList" class="chat-history-list"></div>
+            </section>
+            <div class="sidebar-footer">
+                <div class="user-profile-section">
+                    <div class="user-info-display">
+                        <div class="user-avatar">我</div>
+                        <div class="user-details"><span class="user-name">服务器管理员</span><span class="user-role">SSH 操作受控</span></div>
+                    </div>
+                    <button id="logoutButton" class="icon-button" type="button" title="清除访问口令" aria-label="清除访问口令">
+                        <svg viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </aside>
+    <main class="main-content">
+        <button id="toggleSidebar" class="sidebar-toggle-btn" type="button" aria-label="折叠侧边栏">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M15 19L8 12L15 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button id="mobileMenu" class="mobile-menu-btn" type="button" aria-label="打开侧边栏">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <section class="chat-view">
+            <header class="view-header"><div><h1 class="view-title">智能服务器助手</h1><p class="view-subtitle">多服务器诊断与受控 SSH 操作</p></div></header>
+            <div id="chatContainer" class="chat-container centered">
+                <div id="welcome" class="welcome-greeting">
+                    <span class="welcome-status">SSH · STRICT HOST KEY</span>
+                    <h2>需要检查哪台服务器？</h2>
+                    <p>我可以查看状态和日志；重启服务或容器会在对话中等待你确认</p>
+                    <div class="quick-questions">
+                        <button type="button" data-question="列出所有可以管理的服务器和允许操作的服务">查看服务器清单</button>
+                        <button type="button" data-question="检查所有服务器的运行时间、内存和磁盘使用情况">执行健康巡检</button>
+                        <button type="button" data-question="查看指定服务器上正在运行的 Docker 容器，请先询问服务器">查看容器状态</button>
+                        <button type="button" data-question="帮我分析某个服务的异常日志，请先询问服务器和服务名">分析服务日志</button>
+                    </div>
+                </div>
+                <div id="messages" class="chat-messages" aria-live="polite"></div>
+                <div class="chat-input-container">
+                    <div class="input-wrapper">
+                        <textarea id="messageInput" class="message-input" rows="1" maxlength="4000" placeholder="向服务器助手提问"></textarea>
+                        <div class="right-actions"><button id="sendButton" class="send-btn-circle" type="button" aria-label="发送消息">
+                            <svg viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2"/></svg>
+                        </button></div>
+                    </div>
+                    <p class="composer-tip">状态变更操作只会在你点击“执行”后发往目标服务器。</p>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+<div id="loginOverlay" class="modal-overlay auth-overlay" hidden>
+    <form id="loginForm" class="auth-card">
+        <div class="auth-brand">S</div><h2>进入服务器助手</h2>
+        <p>请输入服务端配置的服务器助手访问口令。</p>
+        <label for="accessToken">访问口令</label>
+        <input id="accessToken" type="password" autocomplete="current-password" required>
+        <p id="loginError" class="form-error" role="alert"></p>
+        <button class="primary-button" type="submit">验证并进入</button>
+    </form>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

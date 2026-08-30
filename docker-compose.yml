@@ -7,6 +7,8 @@ services:
       - .env
     ports:
       - "${SERVER_PORT:-20005}:${SERVER_PORT:-20005}"
+    volumes:
+      - "${SERVER_ASSISTANT_SSH_DIR:-./deploy/ssh}:/run/ai-platform/ssh:ro"
     restart: unless-stopped
     extra_hosts:
       # 本地 Ollama 运行在宿主机时可通过该地址访问；DeepSeek 模式不会使用它。

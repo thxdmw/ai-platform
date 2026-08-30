@@ -41,6 +41,15 @@ ai-platform:
     request-timeout: ${BLOG_API_REQUEST_TIMEOUT:30s}
     sse-timeout: ${BLOG_ASSISTANT_SSE_TIMEOUT:120s}
     approval-ttl: ${BLOG_PUBLICATION_APPROVAL_TTL:15m}
+  server:
+    # 服务器清单是 JSON 数组；凭据只引用环境变量名或挂载的私钥文件，不传给浏览器和模型。
+    access-token: ${SERVER_ASSISTANT_ACCESS_TOKEN:}
+    servers-json: ${SERVER_ASSISTANT_SERVERS_JSON:[]}
+    connect-timeout: ${SERVER_SSH_CONNECT_TIMEOUT:8s}
+    command-timeout: ${SERVER_SSH_COMMAND_TIMEOUT:30s}
+    sse-timeout: ${SERVER_ASSISTANT_SSE_TIMEOUT:120s}
+    approval-ttl: ${SERVER_OPERATION_APPROVAL_TTL:10m}
+    max-output-bytes: ${SERVER_SSH_MAX_OUTPUT_BYTES:16384}
 
 management:
   endpoints:
