@@ -1,6 +1,6 @@
 # AI Platform
 
-面向个人项目的统一 AI 平台。当前已建立模块化单体骨架，并实现可嵌入首页的网站助手组件和流式问答接口。
+面向个人项目的统一 AI 平台。当前已实现可嵌入首页的网站助手，以及带博客查询和发布审批的博客后台助手。
 
 生产域名：`https://ai.thxdxw.cn`。
 
@@ -12,7 +12,10 @@
 - 精确 CORS 来源配置
 - 按客户端地址进行基础限流
 - Ollama 与 DeepSeek 模型配置入口
-- 博客助手、服务器助手的模块边界
+- 独立的博客后台助手页面与本地会话历史
+- 博客文章、分类、标签和统计信息只读工具
+- 一次性博客发布审批任务，模型不能直接执行发布
+- 服务器助手模块边界
 
 ## 本地启动
 
@@ -24,6 +27,8 @@ mvn spring-boot:run
 
 组件预览地址：`http://localhost:9900/preview/website-assistant.html`
 
+博客助手地址：`http://localhost:9900/blog/assistant/`
+
 首页只需加载一个脚本：
 
 ```html
@@ -31,6 +36,9 @@ mvn spring-boot:run
 ```
 
 环境变量与反向代理说明见 [首页接入文档](docs/home-page-integration.md)。
+
+博客助手需要配置 `BLOG_ASSISTANT_ACCESS_TOKEN`、`BLOG_API_BASE_URL` 和
+`BLOG_API_KEY`。访问口令由管理员进入页面时手动输入，只保存在浏览器当前会话中。
 
 ## CI/CD
 

@@ -32,6 +32,15 @@ ai-platform:
     allowed-origins: ${WEBSITE_ASSISTANT_ALLOWED_ORIGINS:http://localhost:9900,http://localhost:8080,http://127.0.0.1:8080,https://thxdxw.cn}
     requests-per-minute: ${WEBSITE_ASSISTANT_REQUESTS_PER_MINUTE:20}
     sse-timeout: ${WEBSITE_ASSISTANT_SSE_TIMEOUT:90s}
+  blog:
+    # 博客助手只允许持有访问口令的管理员使用；生产环境不得留空。
+    access-token: ${BLOG_ASSISTANT_ACCESS_TOKEN:}
+    api-base-url: ${BLOG_API_BASE_URL:http://localhost:9090/agent/api/blog}
+    api-key: ${BLOG_API_KEY:}
+    connect-timeout: ${BLOG_API_CONNECT_TIMEOUT:5s}
+    request-timeout: ${BLOG_API_REQUEST_TIMEOUT:30s}
+    sse-timeout: ${BLOG_ASSISTANT_SSE_TIMEOUT:120s}
+    approval-ttl: ${BLOG_PUBLICATION_APPROVAL_TTL:15m}
 
 management:
   endpoints:

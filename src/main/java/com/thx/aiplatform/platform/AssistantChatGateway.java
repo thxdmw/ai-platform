@@ -5,4 +5,6 @@ import reactor.core.publisher.Flux;
 public interface AssistantChatGateway {
 
     Flux<String> stream(AssistantChatCommand command);
+
+    Flux<String> stream(AssistantChatCommand command, Object... tools);
 }

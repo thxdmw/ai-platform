@@ -27,11 +27,20 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
 
     @Override
     public Flux<String> stream(AssistantChatCommand command) {
+        return stream(command, new Object[0]);
+    }
+
+    @Override
+    public Flux<String> stream(AssistantChatCommand command, Object... tools) {
         String scopedConversationId = command.assistantId() + ":" + command.conversationId();
-        return chatClient.prompt()
+        ChatClient.ChatClientRequestSpec request = chatClient.prompt()
                 .system(command.systemPrompt())
                 .user(command.userMessage())
-                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, scopedConversationId))
+                .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, scopedConversationId));
+        if (tools != null && tools.length > 0) {
+            request.tools(tools);
+        }
+        return request
                 .stream()
                 .content()
                 .filter(content -> content != null && !content.isBlank());

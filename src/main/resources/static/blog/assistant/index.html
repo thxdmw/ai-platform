@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+    <title>博客助手 · AI Platform</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./app.css">
+    <script src="./app.js" defer></script>
+</head>
+<body>
+<div id="app" class="app-layout">
+    <div id="sidebarOverlay" class="sidebar-overlay"></div>
+    <aside id="sidebar" class="sidebar">
+        <button id="closeSidebar" class="sidebar-close-btn" type="button" aria-label="关闭侧边栏">×</button>
+        <div class="sidebar-header">
+            <div class="sidebar-brand"><span class="brand-icon">B</span><span class="sidebar-title">博客助手</span></div>
+        </div>
+        <div class="sidebar-content">
+            <button id="newChatButton" class="new-chat-btn" type="button">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span>新建对话</span>
+            </button>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" type="button">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2"/></svg>
+                    对话
+                </button>
+                <button id="sidebarPublishButton" class="nav-item" type="button">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    发布文章
+                </button>
+            </nav>
+            <section class="chat-history-section">
+                <div class="history-header"><span>近期对话</span></div>
+                <div id="historyList" class="chat-history-list"></div>
+            </section>
+            <div class="sidebar-footer">
+                <div class="user-profile-section">
+                    <div class="user-info-display">
+                        <div class="user-avatar">我</div>
+                        <div class="user-details"><span class="user-name">博客管理员</span><span class="user-role">访问已授权</span></div>
+                    </div>
+                    <button id="logoutButton" class="icon-button" type="button" title="清除访问口令" aria-label="清除访问口令">
+                        <svg viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2"/></svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <button id="toggleSidebar" class="sidebar-toggle-btn" type="button" aria-label="折叠侧边栏">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M15 19L8 12L15 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button id="mobileMenu" class="mobile-menu-btn" type="button" aria-label="打开侧边栏">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <section class="chat-view">
+            <header class="view-header">
+                <div><h1 class="view-title">智能博客助手</h1><p class="view-subtitle">查询、选题与 Markdown 草稿</p></div>
+                <button id="headerPublishButton" class="header-action-btn" type="button">发布文章</button>
+            </header>
+            <div id="chatContainer" class="chat-container centered">
+                <div id="welcome" class="welcome-greeting">
+                    <h2>今天想写点什么？</h2>
+                    <p>我可以查询现有文章、整理选题并生成 Markdown 草稿</p>
+                    <div class="quick-questions">
+                        <button type="button" data-question="帮我查询最新的 5 篇博客文章">查询最新文章</button>
+                        <button type="button" data-question="分析现有博客内容，给我 3 个适合继续写的技术选题">规划后续选题</button>
+                        <button type="button" data-question="获取所有博客分类和标签，并帮我整理用途">查看分类和标签</button>
+                        <button type="button" data-question="帮我写一篇技术博客草稿，先询问我主题和目标读者">撰写博客草稿</button>
+                    </div>
+                </div>
+                <div id="messages" class="chat-messages" aria-live="polite"></div>
+                <div class="chat-input-container">
+                    <div class="input-wrapper">
+                        <textarea id="messageInput" class="message-input" rows="1" maxlength="4000" placeholder="向博客助手提问"></textarea>
+                        <div class="right-actions">
+                            <button id="sendButton" class="send-btn-circle" type="button" aria-label="发送消息">
+                                <svg viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <p class="composer-tip">AI 只能准备内容，发布仍需在服务端审批。</p>
+                </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<div id="loginOverlay" class="modal-overlay auth-overlay" hidden>
+    <form id="loginForm" class="auth-card">
+        <div class="auth-brand">B</div>
+        <h2>进入博客助手</h2>
+        <p>请输入服务端配置的博客助手访问口令。</p>
+        <label for="accessToken">访问口令</label>
+        <input id="accessToken" type="password" autocomplete="current-password" required>
+        <p id="loginError" class="form-error" role="alert"></p>
+        <button class="primary-button" type="submit">验证并进入</button>
+    </form>
+</div>
+
+<div id="publishOverlay" class="modal-overlay" hidden>
+    <section class="publish-dialog" role="dialog" aria-modal="true" aria-labelledby="publishTitle">
+        <header class="dialog-header">
+            <div><h2 id="publishTitle">发布文章</h2><p>先创建待审批任务，确认后才会调用博客系统。</p></div>
+            <button id="closePublish" class="icon-button" type="button" aria-label="关闭">×</button>
+        </header>
+        <form id="publicationForm" class="publication-form">
+            <label class="field field-wide">标题<input id="publicationTitle" maxlength="200" required></label>
+            <label class="field field-wide">Markdown 正文<textarea id="publicationContent" rows="14" maxlength="100000" required></textarea></label>
+            <label class="field">分类 ID<input id="publicationCategory" type="number" min="1" placeholder="可选"></label>
+            <label class="field">标签 ID<input id="publicationTags" maxlength="500" placeholder="例如 1,2,3"></label>
+            <label class="field field-wide">摘要<textarea id="publicationDescription" rows="3" maxlength="500"></textarea></label>
+            <label class="field">关键词<input id="publicationKeywords" maxlength="500" placeholder="逗号分隔"></label>
+            <label class="field">作者<input id="publicationAuthor" maxlength="100" value="AI Assistant"></label>
+            <label class="field field-wide">封面地址<input id="publicationCover" type="url" maxlength="2048"></label>
+            <div class="form-actions field-wide">
+                <button id="useLatestAnswer" class="secondary-button" type="button">使用最后一条 AI 回复</button>
+                <button class="primary-button" type="submit">创建待审批任务</button>
+            </div>
+        </form>
+        <section id="approvalPanel" class="approval-panel" hidden>
+            <span class="approval-badge">等待审批</span>
+            <h3 id="approvalTitle"></h3>
+            <p id="approvalSummary"></p>
+            <label>输入“发布”确认<input id="approvalConfirmation" autocomplete="off"></label>
+            <div class="form-actions">
+                <button id="backToEdit" class="secondary-button" type="button">返回编辑</button>
+                <button id="approvePublication" class="danger-button" type="button" disabled>确认发布</button>
+            </div>
+        </section>
+    </section>
+</div>
+
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
