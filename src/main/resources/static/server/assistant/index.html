@@ -75,11 +75,6 @@
             <header class="view-header server-view-header">
                 <div><h1 class="view-title">智能服务器助手</h1><p id="currentServerMeta" class="view-subtitle">请选择本次对话使用的服务器</p></div>
                 <div class="server-picker">
-                    <label class="model-picker-label">模型
-                        <select id="modelSelect" class="model-select" aria-label="当前对话模型">
-                            <option value="">系统默认模型</option>
-                        </select>
-                    </label>
                     <span class="server-picker-label">当前服务器</span>
                     <div class="server-select">
                         <button id="serverSelectButton" class="server-select-button" type="button" aria-label="当前服务器" aria-haspopup="listbox" aria-expanded="false">
@@ -107,9 +102,24 @@
                 <div class="chat-input-container">
                     <div class="input-wrapper">
                         <textarea id="messageInput" class="message-input" rows="1" maxlength="4000" placeholder="向服务器助手提问"></textarea>
-                        <div class="right-actions"><button id="sendButton" class="send-btn-circle" type="button" aria-label="发送消息">
+                        <div class="right-actions composer-right-actions">
+                            <div class="composer-model-picker">
+                                <button id="modelMenuButton" class="composer-model-button" type="button" aria-haspopup="true" aria-expanded="false">
+                                    <span id="composerModelLabel">系统默认模型</span><span id="composerReasoningLabel">自动</span><span aria-hidden="true">⌃</span>
+                                </button>
+                                <div id="modelMenu" class="composer-model-menu" hidden>
+                                    <label><span>模型</span><select id="modelSelect" aria-label="当前对话模型"><option value="">系统默认模型</option></select></label>
+                                    <label><span>推理等级</span><select id="reasoningSelect" aria-label="当前对话推理等级">
+                                        <option value="auto">自动</option><option value="none">关闭</option><option value="minimal">最小</option>
+                                        <option value="low">低</option><option value="medium">中</option><option value="high">高</option>
+                                        <option value="xhigh">超高</option><option value="max">Max</option>
+                                    </select></label>
+                                </div>
+                            </div>
+                            <button id="sendButton" class="send-btn-circle" type="button" aria-label="发送消息">
                             <svg viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2"/></svg>
-                        </button></div>
+                            </button>
+                        </div>
                     </div>
                     <p class="composer-tip">待确认操作可点击按钮，也可直接回复“执行”或“取消”。</p>
                 </div>
@@ -141,23 +151,27 @@
             <main class="settings-main">
                 <section id="modelProviderSection" class="model-provider-settings">
                     <div class="settings-section-title">
-                        <div><h3>模型提供方</h3><p>支持 OpenAI 兼容的 Chat Completions 接口；API 密钥加密保存且不会返回页面。</p></div>
+                        <div><h3>模型提供方</h3><p>自定义 API 协议与模型目录；API 密钥加密保存且不会返回页面。</p></div>
                         <button id="addModelProviderButton" class="secondary-button" type="button">添加自定义提供方</button>
                     </div>
                     <div id="modelProviderList" class="command-list"></div>
                     <form id="modelProviderForm" class="settings-form command-form" hidden>
                         <input id="modelProviderId" type="hidden">
                         <div class="form-grid">
-                            <label>提供方名称<input id="modelProviderName" maxlength="80" required></label>
+                            <label>Provider ID<input id="modelProviderKey" maxlength="64" placeholder="acme-gateway" pattern="[a-z][a-z0-9-]{1,63}" required><small>以小写字母开头，只能包含小写字母、数字和连字符。</small></label>
+                            <label>显示名称<input id="modelProviderName" maxlength="80" required></label>
                             <label class="checkbox-label"><input id="modelProviderEnabled" type="checkbox" checked> 启用该提供方</label>
-                            <label class="form-wide">基础地址<input id="modelProviderBaseUrl" maxlength="500" placeholder="https://api.example.com" required></label>
-                            <label class="form-wide">Chat Completions 路径<input id="modelProviderPath" maxlength="200" value="/v1/chat/completions" required></label>
+                            <label class="form-wide">API 地址<input id="modelProviderBaseUrl" maxlength="500" placeholder="https://gateway.example/v1" required></label>
+                            <label>API 协议<select id="modelProviderProtocol"><option value="openai-completions">openai-completions</option><option value="openai-responses">openai-responses</option><option value="anthropic-messages">anthropic-messages</option></select></label>
                             <label class="form-wide">API 密钥<input id="modelProviderApiKey" type="password" maxlength="4000" autocomplete="new-password" placeholder="编辑时留空表示不修改"></label>
-                            <label class="form-wide">模型列表<textarea id="modelProviderModels" rows="5" maxlength="12000" placeholder="每行：显示名称 | 模型编号 | 推理等级（可留空）&#10;例如：DeepSeek Coder | deepseek-coder | high" required></textarea><small>每行配置一个模型。模型编号按套餐提供方文档填写；推理等级不支持时留空。</small></label>
+                            <div class="form-wide model-catalog-heading"><span>模型目录</span><button id="discoverProviderModelsButton" class="secondary-button" type="button">获取可用模型</button></div>
+                            <div id="modelProviderModels" class="form-wide provider-model-rows"></div>
+                            <div class="form-wide"><button id="addProviderModelButton" class="secondary-button" type="button">＋ 添加模型</button></div>
                         </div>
                         <p id="modelProviderFormError" class="form-error" role="alert"></p>
                         <div class="settings-form-actions">
                             <button id="deleteModelProviderButton" class="danger-button" type="button" hidden>删除提供方</button>
+                            <button id="testModelProviderButton" class="secondary-button" type="button">测试连接</button>
                             <button id="cancelModelProviderButton" class="secondary-button" type="button">取消</button>
                             <button class="primary-button compact" type="submit">保存提供方</button>
                         </div>

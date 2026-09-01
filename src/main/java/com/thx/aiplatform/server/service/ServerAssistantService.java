@@ -9,6 +9,7 @@ import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import com.thx.aiplatform.platform.AssistantStreamEvent;
 
 /**
  * 服务器助手编排服务：把页面当前选中的服务器、会话与平台聊天网关组装起来，构造只属于
@@ -75,39 +76,40 @@ public class ServerAssistantService {
      * 确认选项只属于上一轮，新消息到来即作废，避免旧的危险命令确认框在后续页面状态下被
      * 误点；同时把会话绑定到这台服务器（同一对话不允许切换服务器）。
      */
-    public Flux<String> stream(ServerChatRequest request) {
+    public Flux<AssistantStreamEvent> stream(ServerChatRequest request) {
         ServerDefinition server = registry.requireEnabled(request.serverId());
         conversationBindingService.bind(request.conversationId(), server.id());
         operationService.cancelForConversation(request.conversationId());
         commandProposalService.cancelForConversation(request.conversationId());
         continuationService.cancelForConversation(request.conversationId());
-        return stream(request.conversationId(), server, request.message().trim(), request.modelId());
+        return stream(request.conversationId(), server, request.message().trim(), request.modelId(), request.reasoningEffort());
     }
 
     /**
      * 页面动作（确认执行/确认添加）完成后的续跑入口：不接收用户新输入，而是消费服务端
      * 签发的续跑凭证，用其中的「系统可信事件」消息恢复模型会话继续原任务。
      */
-    public Flux<String> continueAfterAction(ServerContinuationRequest request) {
+    public Flux<AssistantStreamEvent> continueAfterAction(ServerContinuationRequest request) {
         ServerDefinition server = registry.requireEnabled(request.serverId());
         conversationBindingService.bind(request.conversationId(), server.id());
         String continuationMessage = continuationService.consume(
                 request.continuationId(), request.conversationId(), server.id());
-        return stream(request.conversationId(), server, continuationMessage, request.modelId());
+        return stream(request.conversationId(), server, continuationMessage, request.modelId(), request.reasoningEffort());
     }
 
     /**
      * 构造模型命令与本次对话的工具集后转发聊天网关。服务器上下文拼进 system prompt，
      * 让模型始终知道自己在为哪台服务器工作且无权自行更换。
      */
-    private Flux<String> stream(String conversationId, ServerDefinition server, String message, String modelId) {
+    private Flux<AssistantStreamEvent> stream(String conversationId, ServerDefinition server, String message, String modelId,
+                                              String reasoningEffort) {
         AssistantChatCommand command = new AssistantChatCommand(
                 ASSISTANT_ID, conversationId,
                 SYSTEM_PROMPT + "\n当前服务器：" + server.name() + "（" + server.id() + "，" + server.host() + ":" + server.port() + "）",
-                message, modelProviderService.resolve(modelId));
+                message, modelProviderService.resolve(modelId, reasoningEffort));
         ServerCommandTool tools = new ServerCommandTool(conversationId, server, configurationService,
                 operationService, commandProposalService, executor, objectMapper, commandTemplateService);
-        return chatGateway.stream(command, tools);
+        return chatGateway.streamEvents(command, tools);
     }
 
     /**

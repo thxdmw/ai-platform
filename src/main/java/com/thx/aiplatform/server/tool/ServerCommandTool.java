@@ -14,6 +14,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -27,6 +29,8 @@ import java.util.Map;
  * 单例工具在多会话之间串状态。</p>
  */
 public final class ServerCommandTool {
+
+    private static final Logger log = LoggerFactory.getLogger(ServerCommandTool.class);
 
     private final String conversationId;
     private final ServerDefinition server;
@@ -60,6 +64,7 @@ public final class ServerCommandTool {
      */
     @Tool(description = "列出当前对话所选服务器允许执行的命令。只使用返回的命令 ID；没有匹配命令时必须继续调用 proposeCommand，不能只用文字询问是否添加")
     public String listCommands() {
+        log.info("模型调用服务器工具，tool=listCommands，conversationId={}，serverId={}", conversationId, server.id());
         List<Map<String, Object>> commands = configurationService.enabledCommands(server.id()).stream()
                 .map(command -> Map.<String, Object>of(
                         "id", command.id(), "name", command.name(), "description", command.description(),
@@ -85,6 +90,8 @@ public final class ServerCommandTool {
             @ToolParam(description = "参数 JSON 对象；无参数命令传 {}。键和值必须符合 listCommands 返回的 parameters") String argumentsJson,
             @ToolParam(description = "为什么需要执行，以及已有的判断依据") String reason
     ) {
+        log.info("模型调用服务器工具，tool=executeCommand，conversationId={}，serverId={}，commandId={}",
+                conversationId, server.id(), commandId);
         ServerCommandDefinition command = configurationService.requireEnabledCommand(server.id(), commandId);
         String renderedCommand = templateService.render(command, argumentsJson);
         if (command.riskLevel() == ServerCommandRisk.DANGEROUS) {
@@ -94,7 +101,10 @@ public final class ServerCommandTool {
             return "已生成危险命令“" + pending.commandName() + "”的确认选项，等待用户确认。"
                     + "不要声称命令已经执行，也不要输出内部操作编号。";
         }
-        return executor.execute(server, renderedCommand).forModel();
+        String result = executor.execute(server, renderedCommand).forModel();
+        log.info("服务器工具执行完成，conversationId={}，serverId={}，commandId={}",
+                conversationId, server.id(), commandId);
+        return result;
     }
 
     /**
@@ -109,6 +119,8 @@ public final class ServerCommandTool {
             @ToolParam(description = "参数规则 JSON 数组；无参数传 []。类型支持 PATH/ENUM/INTEGER/TEXT；PATH 必须提供 allowedRoots，ENUM 必须提供 allowedValues") String parameterSchema,
             @ToolParam(description = "为什么当前任务需要添加这条命令") String reason
     ) {
+        log.info("模型调用服务器工具，tool=proposeCommand，conversationId={}，serverId={}，name={}",
+                conversationId, server.id(), name);
         operationService.cancelForConversation(conversationId);
         PendingServerCommandProposalView pending = commandProposalService.prepare(
                 conversationId, server, name, description, commandText, parameterSchema, reason);

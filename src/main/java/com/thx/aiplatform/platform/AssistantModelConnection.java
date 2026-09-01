@@ -6,6 +6,7 @@ package com.thx.aiplatform.platform;
 public record AssistantModelConnection(
         String baseUrl,
         String chatCompletionsPath,
+        String apiProtocol,
         String apiKey,
         String model,
         String reasoningEffort
@@ -13,6 +14,7 @@ public record AssistantModelConnection(
     @Override
     public String toString() {
         return "AssistantModelConnection[baseUrl=" + baseUrl + ", chatCompletionsPath=" + chatCompletionsPath
-                + ", apiKey=***, model=" + model + ", reasoningEffort=" + reasoningEffort + "]";
+                + ", apiProtocol=" + apiProtocol + ", apiKey=***, model=" + model
+                + ", reasoningEffort=" + reasoningEffort + "]";
     }
 }

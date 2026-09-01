@@ -20,5 +20,7 @@ public record ServerChatRequest(
         @Size(max = 4000, message = "消息不能超过 4000 个字符")
         String message,
         @Size(max = 36, message = "模型编号不合法")
-        String modelId
+        String modelId,
+        @Size(max = 20, message = "推理等级不合法")
+        String reasoningEffort
 ) { }

@@ -17,41 +17,45 @@ public class ServerModelProviderRepository {
 
     public List<ServerModelProviderDefinition> findProviders() {
         return jdbc.sql("""
-                SELECT id, name, base_url, chat_completions_path, api_key_ciphertext, enabled
+                SELECT id, provider_key, name, base_url, chat_completions_path, api_protocol,
+                       api_key_ciphertext, enabled
                 FROM server_assistant_model_provider ORDER BY created_at, name
                 """).query((row, index) -> new ServerModelProviderDefinition(
-                row.getString("id"), row.getString("name"), row.getString("base_url"),
-                row.getString("chat_completions_path"), row.getString("api_key_ciphertext"),
+                row.getString("id"), row.getString("provider_key"), row.getString("name"), row.getString("base_url"),
+                row.getString("chat_completions_path"), row.getString("api_protocol"), row.getString("api_key_ciphertext"),
                 row.getBoolean("enabled"))).list();
     }
 
     public Optional<ServerModelProviderDefinition> findProvider(String id) {
         return jdbc.sql("""
-                SELECT id, name, base_url, chat_completions_path, api_key_ciphertext, enabled
+                SELECT id, provider_key, name, base_url, chat_completions_path, api_protocol,
+                       api_key_ciphertext, enabled
                 FROM server_assistant_model_provider WHERE id = :id
                 """).param("id", id).query((row, index) -> new ServerModelProviderDefinition(
-                row.getString("id"), row.getString("name"), row.getString("base_url"),
-                row.getString("chat_completions_path"), row.getString("api_key_ciphertext"),
+                row.getString("id"), row.getString("provider_key"), row.getString("name"), row.getString("base_url"),
+                row.getString("chat_completions_path"), row.getString("api_protocol"), row.getString("api_key_ciphertext"),
                 row.getBoolean("enabled"))).optional();
     }
 
     public void insertProvider(ServerModelProviderDefinition value) {
         jdbc.sql("""
                 INSERT INTO server_assistant_model_provider
-                  (id, name, base_url, chat_completions_path, api_key_ciphertext, enabled)
-                VALUES (:id, :name, :baseUrl, :path, :key, :enabled)
-                """).params(java.util.Map.of("id", value.id(), "name", value.name(), "baseUrl", value.baseUrl(),
-                "path", value.chatCompletionsPath(), "key", value.apiKeyCiphertext(), "enabled", value.enabled())).update();
+                  (id, provider_key, name, base_url, chat_completions_path, api_protocol, api_key_ciphertext, enabled)
+                VALUES (:id, :providerKey, :name, :baseUrl, :path, :protocol, :key, :enabled)
+                """).params(java.util.Map.of("id", value.id(), "providerKey", value.providerKey(),
+                "name", value.name(), "baseUrl", value.baseUrl(), "path", value.chatCompletionsPath(),
+                "protocol", value.apiProtocol(), "key", value.apiKeyCiphertext(), "enabled", value.enabled())).update();
     }
 
     public void updateProvider(ServerModelProviderDefinition value) {
         int count = jdbc.sql("""
                 UPDATE server_assistant_model_provider
-                SET name=:name, base_url=:baseUrl, chat_completions_path=:path,
-                    api_key_ciphertext=:key, enabled=:enabled, updated_at=CURRENT_TIMESTAMP
+                SET provider_key=:providerKey, name=:name, base_url=:baseUrl, chat_completions_path=:path,
+                    api_protocol=:protocol, api_key_ciphertext=:key, enabled=:enabled, updated_at=CURRENT_TIMESTAMP
                 WHERE id=:id
-                """).params(java.util.Map.of("id", value.id(), "name", value.name(), "baseUrl", value.baseUrl(),
-                "path", value.chatCompletionsPath(), "key", value.apiKeyCiphertext(), "enabled", value.enabled())).update();
+                """).params(java.util.Map.of("id", value.id(), "providerKey", value.providerKey(),
+                "name", value.name(), "baseUrl", value.baseUrl(), "path", value.chatCompletionsPath(),
+                "protocol", value.apiProtocol(), "key", value.apiKeyCiphertext(), "enabled", value.enabled())).update();
         if (count == 0) throw new IllegalArgumentException("模型提供方不存在");
     }
 

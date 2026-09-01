@@ -24,25 +24,28 @@ class ServerModelProviderServiceTest {
     @Test
     void 密钥只保存密文且所选模型能解析为兼容连接() {
         ServerModelProviderView provider = service.create(new ServerModelProviderRequest(
-                "Coding 套餐", "https://coding.example.com/", "/v1/chat/completions", "sk-secret", true,
+                "coding-plan", "Coding 套餐", "https://coding.example.com/", "openai-completions", "sk-secret", true,
                 List.of(new ServerModelOptionRequest("Coder", "coder-model", "high", true, 0))));
 
         assertThat(repository.findProvider(provider.id()).orElseThrow().apiKeyCiphertext())
                 .startsWith("v1:").doesNotContain("sk-secret");
         assertThat(provider.apiKeyConfigured()).isTrue();
         assertThat(provider.toString()).doesNotContain("sk-secret");
-        AssistantModelConnection connection = service.resolve(provider.models().getFirst().id());
+        AssistantModelConnection connection = service.resolve(provider.models().getFirst().id(), "max");
         assertThat(connection.baseUrl()).isEqualTo("https://coding.example.com");
         assertThat(connection.chatCompletionsPath()).isEqualTo("/v1/chat/completions");
+        assertThat(connection.apiProtocol()).isEqualTo("openai-completions");
         assertThat(connection.model()).isEqualTo("coder-model");
-        assertThat(connection.reasoningEffort()).isEqualTo("high");
+        assertThat(connection.reasoningEffort()).isEqualTo("max");
         assertThat(connection.apiKey()).isEqualTo("sk-secret");
         assertThat(connection.toString()).doesNotContain("sk-secret");
 
         String modelId = provider.models().getFirst().id();
         ServerModelProviderView updated = service.update(provider.id(), new ServerModelProviderRequest(
-                "Coding 套餐修改", "https://coding.example.com", "/v1/chat/completions", null, true,
+                "coding-plan", "Coding 套餐修改", "https://coding.example.com/v1", "openai-completions", null, true,
                 List.of(new ServerModelOptionRequest("Coder 新名称", "coder-model", "medium", true, 0))));
         assertThat(updated.models().getFirst().id()).isEqualTo(modelId);
+        assertThat(updated.providerKey()).isEqualTo("coding-plan");
+        assertThat(service.resolve(modelId, "auto").reasoningEffort()).isEqualTo("medium");
     }
 }

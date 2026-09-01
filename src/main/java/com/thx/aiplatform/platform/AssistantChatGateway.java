@@ -15,5 +15,8 @@ public interface AssistantChatGateway {
     // 带 tools 的重载按需给模型挂可调用工具；不带则退化为纯对话。
     Flux<String> stream(AssistantChatCommand command, Object... tools);
 
+    /** 需要区分正文和提供方显式 reasoning 字段的页面使用此入口。 */
+    Flux<AssistantStreamEvent> streamEvents(AssistantChatCommand command, Object... tools);
+
     void clear(String assistantId, String conversationId);
 }

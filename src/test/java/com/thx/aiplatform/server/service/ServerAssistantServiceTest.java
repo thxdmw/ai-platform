@@ -26,7 +26,7 @@ class ServerAssistantServiceTest {
         ServerDefinition server = new ServerDefinition("server-a", "服务器 A", "host", 22, "ops",
                 ServerAuthenticationType.PASSWORD, "ciphertext", null, "host ssh-ed25519 AAAATESTKEY", true);
         when(registry.requireEnabled("server-a")).thenReturn(server);
-        when(chatGateway.stream(any(AssistantChatCommand.class), any(Object[].class))).thenReturn(Flux.empty());
+        when(chatGateway.streamEvents(any(AssistantChatCommand.class), any(Object[].class))).thenReturn(Flux.empty());
         ServerActionContinuationService continuationService = mock(ServerActionContinuationService.class);
         when(continuationService.consume("continuation-1", "conversation-1", "server-a"))
                 .thenReturn("系统可信事件：命令已经添加，请继续原任务");
@@ -38,10 +38,10 @@ class ServerAssistantServiceTest {
                 mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class));
 
         service.continueAfterAction(new ServerContinuationRequest(
-                "conversation-1", "server-a", "continuation-1", null)).blockLast();
+                "conversation-1", "server-a", "continuation-1", null, "high")).blockLast();
 
         ArgumentCaptor<AssistantChatCommand> command = ArgumentCaptor.forClass(AssistantChatCommand.class);
-        verify(chatGateway).stream(command.capture(), any(Object[].class));
+        verify(chatGateway).streamEvents(command.capture(), any(Object[].class));
         assertThat(command.getValue().conversationId()).isEqualTo("conversation-1");
         assertThat(command.getValue().userMessage()).contains("命令已经添加");
         verify(bindingService).bind("conversation-1", "server-a");

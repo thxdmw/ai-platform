@@ -22,7 +22,10 @@
         loginError: document.querySelector('#loginError'), toast: document.querySelector('#toast'),
         serverSelectButton: document.querySelector('#serverSelectButton'), serverSelectLabel: document.querySelector('#serverSelectLabel'),
         serverSelectMenu: document.querySelector('#serverSelectMenu'), currentServerMeta: document.querySelector('#currentServerMeta'),
-        modelSelect: document.querySelector('#modelSelect'),
+        modelSelect: document.querySelector('#modelSelect'), reasoningSelect: document.querySelector('#reasoningSelect'),
+        modelMenuButton: document.querySelector('#modelMenuButton'), modelMenu: document.querySelector('#modelMenu'),
+        composerModelLabel: document.querySelector('#composerModelLabel'),
+        composerReasoningLabel: document.querySelector('#composerReasoningLabel'),
         conversationBulkActions: document.querySelector('#conversationBulkActions'),
         selectAllConversations: document.querySelector('#selectAllConversations'),
         selectedConversationCount: document.querySelector('#selectedConversationCount'),
@@ -77,6 +80,9 @@
         document.querySelector('#addModelProviderButton').addEventListener('click', () => editModelProvider(null));
         document.querySelector('#cancelModelProviderButton').addEventListener('click', () => { elements.modelProviderForm.hidden = true; });
         document.querySelector('#deleteModelProviderButton').addEventListener('click', deleteModelProvider);
+        document.querySelector('#testModelProviderButton').addEventListener('click', () => probeModelProvider(false));
+        document.querySelector('#discoverProviderModelsButton').addEventListener('click', () => probeModelProvider(true));
+        document.querySelector('#addProviderModelButton').addEventListener('click', () => addProviderModelRow());
         document.querySelector('#cancelCommandButton').addEventListener('click', () => { elements.commandForm.hidden = true; });
         document.querySelector('#deleteServerButton').addEventListener('click', deleteServer);
         document.querySelector('#testServerButton').addEventListener('click', testServer);
@@ -86,15 +92,22 @@
         elements.commandForm.addEventListener('submit', saveCommand);
         elements.modelProviderForm.addEventListener('submit', saveModelProvider);
         elements.serverSelectButton.addEventListener('click', toggleServerMenu);
+        elements.modelMenuButton.addEventListener('click', toggleModelMenu);
         elements.modelSelect.addEventListener('change', () => {
             currentConversation().modelId = elements.modelSelect.value || null;
             currentConversation().updatedAt = Date.now();
-            persistConversations();
+            persistConversations(); renderModelSelection();
+        });
+        elements.reasoningSelect.addEventListener('change', () => {
+            currentConversation().reasoningEffort = elements.reasoningSelect.value || 'auto';
+            currentConversation().updatedAt = Date.now();
+            persistConversations(); renderModelSelection();
         });
         document.addEventListener('click', event => {
             if (!event.target.closest('.server-picker')) closeServerMenu();
+            if (!event.target.closest('.composer-model-picker')) closeModelMenu();
         });
-        document.addEventListener('keydown', event => { if (event.key === 'Escape') closeServerMenu(); });
+        document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeServerMenu(); closeModelMenu(); } });
         elements.sidebarOverlay.addEventListener('click', closeMobileSidebar);
         document.querySelectorAll('[data-question]').forEach(button => button.addEventListener('click', () => {
             elements.input.value = button.dataset.question || '';
@@ -170,16 +183,23 @@
 
     function renderModelSelection() {
         const selected = currentConversation()?.modelId || '';
+        const reasoning = currentConversation()?.reasoningEffort || 'auto';
         elements.modelSelect.replaceChildren(new Option('系统默认模型', ''));
         modelOptions.forEach(model => {
-            const suffix = model.reasoningEffort ? ` · ${model.reasoningEffort}` : '';
-            elements.modelSelect.appendChild(new Option(`${model.providerName} / ${model.name}${suffix}`, model.id));
+            const unsupported = model.apiProtocol === 'openai-responses';
+            const option = new Option(`${model.providerName} / ${model.name}${unsupported ? '（当前版本仅支持测试与模型目录）' : ''}`, model.id);
+            option.disabled = unsupported; elements.modelSelect.appendChild(option);
         });
-        if (selected && modelOptions.some(model => model.id === selected)) elements.modelSelect.value = selected;
+        if (selected && modelOptions.some(model => model.id === selected && model.apiProtocol !== 'openai-responses')) elements.modelSelect.value = selected;
         else if (selected) {
             currentConversation().modelId = null;
             persistConversations();
         }
+        elements.reasoningSelect.value = [...elements.reasoningSelect.options].some(option => option.value === reasoning)
+            ? reasoning : 'auto';
+        const model = modelOptions.find(value => value.id === elements.modelSelect.value);
+        elements.composerModelLabel.textContent = model ? model.name : '系统默认模型';
+        elements.composerReasoningLabel.textContent = elements.reasoningSelect.selectedOptions[0]?.textContent || '自动';
     }
 
     function renderModelProviders() {
@@ -194,9 +214,9 @@
             const main = document.createElement('span'); main.className = 'command-item-main';
             const name = document.createElement('strong'); name.textContent = provider.name + (provider.enabled ? '' : '（停用）');
             const description = document.createElement('span');
-            description.textContent = `${provider.baseUrl} · ${provider.models.length} 个模型`;
+            description.textContent = `${provider.providerKey} · ${provider.baseUrl} · ${provider.models.length} 个模型`;
             main.append(name, description);
-            const badge = document.createElement('span'); badge.className = 'risk-badge'; badge.textContent = 'OpenAI 兼容';
+            const badge = document.createElement('span'); badge.className = 'risk-badge'; badge.textContent = provider.apiProtocol;
             item.append(main, badge); item.addEventListener('click', () => editModelProvider(provider.id));
             elements.modelProviderList.appendChild(item);
         });
@@ -207,36 +227,74 @@
         const provider = modelProviders.find(value => value.id === providerId);
         elements.modelProviderForm.reset(); elements.modelProviderForm.hidden = false;
         field('modelProviderId').value = provider?.id || '';
+        field('modelProviderKey').value = provider?.providerKey || '';
         field('modelProviderName').value = provider?.name || '';
         field('modelProviderBaseUrl').value = provider?.baseUrl || '';
-        field('modelProviderPath').value = provider?.chatCompletionsPath || '/v1/chat/completions';
+        field('modelProviderProtocol').value = provider?.apiProtocol || 'openai-completions';
         field('modelProviderApiKey').value = '';
         field('modelProviderEnabled').checked = provider?.enabled ?? true;
-        field('modelProviderModels').value = (provider?.models || []).map(model =>
-            `${model.name} | ${model.modelCode} | ${model.reasoningEffort || ''}`).join('\n');
+        setProviderModelRows(provider?.models || []);
         field('modelProviderFormError').textContent = '';
         field('deleteModelProviderButton').hidden = !provider;
         field('modelProviderName').focus();
     }
 
-    function parseModelOptions(source) {
-        return source.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map((line, index) => {
-            const parts = line.split('|').map(value => value.trim());
-            if (parts.length < 2 || !parts[0] || !parts[1]) throw new Error(`模型列表第 ${index + 1} 行格式不正确`);
-            return { name: parts[0], modelCode: parts[1], reasoningEffort: parts[2] || null, enabled: true, sortOrder: index };
+    function setProviderModelRows(models) {
+        field('modelProviderModels').replaceChildren();
+        (models.length ? models : [{ name: '', modelCode: '' }]).forEach(model => addProviderModelRow(model));
+    }
+
+    function addProviderModelRow(model = {}) {
+        const row = document.createElement('div'); row.className = 'provider-model-row';
+        const code = document.createElement('input'); code.className = 'provider-model-code'; code.placeholder = '模型 ID'; code.maxLength = 200; code.value = model.modelCode || model.id || '';
+        const name = document.createElement('input'); name.className = 'provider-model-name'; name.placeholder = '显示名称'; name.maxLength = 80; name.value = model.name || model.displayName || model.id || '';
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'provider-model-remove'; remove.textContent = '删除';
+        remove.addEventListener('click', () => { row.remove(); if (!field('modelProviderModels').children.length) addProviderModelRow(); });
+        row.append(code, name, remove); field('modelProviderModels').appendChild(row);
+    }
+
+    function readModelOptions() {
+        return [...field('modelProviderModels').querySelectorAll('.provider-model-row')].map((row, index) => {
+            const modelCode = row.querySelector('.provider-model-code').value.trim();
+            const name = row.querySelector('.provider-model-name').value.trim();
+            if (!modelCode || !name) throw new Error(`请完整填写第 ${index + 1} 个模型`);
+            return { name, modelCode, reasoningEffort: null, enabled: true, sortOrder: index };
         });
+    }
+
+    function providerProbePayload() {
+        return { providerId: editingModelProviderId, baseUrl: field('modelProviderBaseUrl').value.trim(),
+            apiProtocol: field('modelProviderProtocol').value, apiKey: field('modelProviderApiKey').value || null };
+    }
+
+    async function probeModelProvider(importModels) {
+        field('modelProviderFormError').textContent = '';
+        const button = field(importModels ? 'discoverProviderModelsButton' : 'testModelProviderButton');
+        button.disabled = true;
+        try {
+            const result = await api('/api/server/v1/model-providers/probe', {
+                method: 'POST', body: JSON.stringify(providerProbePayload())
+            });
+            if (importModels) {
+                if (!result.models.length) throw new Error('连接成功，但提供方没有返回可导入的模型');
+                setProviderModelRows(result.models.map(model => ({ modelCode: model.id, name: model.name })));
+            }
+            showToast(result.message, 5000);
+        } catch (error) { field('modelProviderFormError').textContent = error.message; }
+        finally { button.disabled = false; }
     }
 
     async function saveModelProvider(event) {
         event.preventDefault(); field('modelProviderFormError').textContent = '';
         try {
             const payload = {
+                providerKey: field('modelProviderKey').value.trim(),
                 name: field('modelProviderName').value.trim(),
                 baseUrl: field('modelProviderBaseUrl').value.trim(),
-                chatCompletionsPath: field('modelProviderPath').value.trim(),
+                apiProtocol: field('modelProviderProtocol').value,
                 apiKey: field('modelProviderApiKey').value || null,
                 enabled: field('modelProviderEnabled').checked,
-                models: parseModelOptions(field('modelProviderModels').value)
+                models: readModelOptions()
             };
             await api(editingModelProviderId ? `/api/server/v1/model-providers/${editingModelProviderId}`
                 : '/api/server/v1/model-providers', {
@@ -477,17 +535,18 @@
             const response = await fetch('/api/server/v1/messages', {
                 method: 'POST', headers: authHeaders(),
                 body: JSON.stringify({ conversationId: conversation.id, serverId: conversation.serverId,
-                    message: text, modelId: conversation.modelId || null })
+                    message: text, modelId: conversation.modelId || null,
+                    reasoningEffort: conversation.reasoningEffort || 'auto' })
             });
             if (!response.ok) throw await responseError(response);
-            await consumeSse(response, chunk => {
-                assistantMessage.content += chunk; renderMessages();
-            }, action => {
+            const renderer = createStreamRenderer(assistantMessage);
+            await consumeSse(response, renderer.content, action => {
                 assistantMessage.action = action; renderMessages();
-            });
+            }, renderer.reasoning);
+            renderer.flush();
             if (!assistantMessage.content) assistantMessage.content = '暂时没有得到回答，请稍后再试。';
         } catch (error) {
-            assistantMessage.content = `请求失败：${error.message}`;
+            assistantMessage.content = `请求失败：${friendlyRequestError(error)}`;
             if (error.status === 401) logout();
         } finally {
             assistantMessage.streaming = false; streaming = false; conversation.updatedAt = Date.now();
@@ -497,27 +556,47 @@
 
     // 手写 SSE 消费（与博客页面相同的协议）：POST + Bearer 不能走 EventSource；
         // 按空行切事件、缓冲未完成分片，action 事件在流末尾携带待确认操作/提议。
-        async function consumeSse(response, onChunk, onAction) {
+        async function consumeSse(response, onChunk, onAction, onReasoning = () => {}) {
         const reader = response.body.getReader(); const decoder = new TextDecoder();
         let buffer = ''; let completed = false;
         while (!completed) {
             const { value, done } = await reader.read();
             buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
             const events = buffer.split(/\r?\n\r?\n/); buffer = events.pop() || '';
-            for (const event of events) completed = consumeSseEvent(event, onChunk, onAction) || completed;
+            for (const event of events) completed = consumeSseEvent(event, onChunk, onAction, onReasoning) || completed;
             if (done) break;
         }
-        if (buffer && !completed) consumeSseEvent(buffer, onChunk, onAction);
+        if (buffer && !completed) completed = consumeSseEvent(buffer, onChunk, onAction, onReasoning) || completed;
+        if (!completed) throw new Error('流式连接意外中断，请重试');
     }
 
-    function consumeSseEvent(event, onChunk, onAction) {
+    function consumeSseEvent(event, onChunk, onAction, onReasoning) {
         const lines = event.split(/\r?\n/);
         const eventName = lines.find(line => line.startsWith('event:'))?.slice(6).trim() || 'message';
         const data = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).replace(/^ /, '')).join('\n');
         if (!data) return false;
         if (eventName === 'action') { try { onAction(JSON.parse(data)); } catch (_) { showToast('操作选项解析失败'); } return false; }
+        if (eventName === 'reasoning') { onReasoning(data); return false; }
         if (data.trim() === '[DONE]') return true;
         onChunk(data); return false;
+    }
+
+    // 模型常按几个字符发送一次；把 60ms 内的碎片合并后再重绘，既保留实时感，也避免
+    // Markdown 全量解析与 DOM 重建在每个 token 上发生而造成明显卡顿。
+    function createStreamRenderer(message) {
+        let contentBuffer = ''; let reasoningBuffer = ''; let timer = null;
+        const flush = () => {
+            if (timer) clearTimeout(timer); timer = null;
+            if (contentBuffer) { message.content += contentBuffer; contentBuffer = ''; }
+            if (reasoningBuffer) { message.reasoning = (message.reasoning || '') + reasoningBuffer; reasoningBuffer = ''; }
+            renderMessages();
+        };
+        const schedule = () => { if (!timer) timer = setTimeout(flush, 60); };
+        return {
+            content: chunk => { contentBuffer += chunk; schedule(); },
+            reasoning: chunk => { reasoningBuffer += chunk; schedule(); },
+            flush
+        };
     }
 
     function renderAll() { renderHistory(); renderServerSelection(); renderModelSelection(); renderMessages(); updateStreamingState(); }
@@ -618,6 +697,18 @@
         elements.serverSelectButton.setAttribute('aria-expanded', 'false');
     }
 
+    function toggleModelMenu() {
+        if (elements.modelMenuButton.disabled) return;
+        const willOpen = elements.modelMenu.hidden;
+        elements.modelMenu.hidden = !willOpen;
+        elements.modelMenuButton.setAttribute('aria-expanded', String(willOpen));
+    }
+
+    function closeModelMenu() {
+        elements.modelMenu.hidden = true;
+        elements.modelMenuButton.setAttribute('aria-expanded', 'false');
+    }
+
     function renderHistory() {
         elements.historyList.replaceChildren();
         [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).forEach(conversation => {
@@ -657,6 +748,7 @@
         const stack = document.createElement('div'); stack.className = 'message-stack';
         const content = document.createElement('div'); content.className = 'message-content';
         if (message.role === 'assistant') {
+            if (message.reasoning) stack.appendChild(renderReasoning(message));
             content.classList.add('markdown-body');
             if (message.streaming && !message.content) { content.className = 'message-content typing'; content.textContent = '正在检查'; }
             else { content.innerHTML = renderMarkdown(message.content || ''); decorateCodeBlocks(content); }
@@ -665,6 +757,15 @@
         if (message.action) stack.appendChild(renderAction(message));
         if (!message.streaming && message.content) stack.appendChild(renderCopy(message));
         row.appendChild(stack); return row;
+    }
+
+    function renderReasoning(message) {
+        const details = document.createElement('details'); details.className = 'reasoning-panel';
+        const summary = document.createElement('summary');
+        summary.textContent = message.streaming ? '正在思考…' : '思考过程';
+        const body = document.createElement('div'); body.className = 'reasoning-content markdown-body';
+        body.innerHTML = renderMarkdown(message.reasoning); decorateCodeBlocks(body);
+        details.append(summary, body); return details;
     }
 
     function renderCopy(message) {
@@ -823,18 +924,19 @@
                     conversationId: conversation.id,
                     serverId: conversation.serverId,
                     continuationId,
-                    modelId: conversation.modelId || null
+                    modelId: conversation.modelId || null,
+                    reasoningEffort: conversation.reasoningEffort || 'auto'
                 })
             });
             if (!response.ok) throw await responseError(response);
-            await consumeSse(response, chunk => {
-                assistantMessage.content += chunk; renderMessages();
-            }, action => {
+            const renderer = createStreamRenderer(assistantMessage);
+            await consumeSse(response, renderer.content, action => {
                 assistantMessage.action = action; renderMessages();
-            });
+            }, renderer.reasoning);
+            renderer.flush();
             if (!assistantMessage.content) assistantMessage.content = '操作已完成，但暂时没有得到后续说明。';
         } catch (error) {
-            assistantMessage.content = `操作已完成，但继续处理失败：${error.message}`;
+            assistantMessage.content = `操作已完成，但继续处理失败：${friendlyRequestError(error)}`;
             if (error.status === 401) logout();
         } finally {
             assistantMessage.streaming = false;
@@ -941,14 +1043,14 @@
             : `已同步删除 ${deletedIds.size} 个对话`);
     }
 
-    function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, modelId: null, title: '新对话', messages: [], updatedAt: Date.now() }; }
+    function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, modelId: null, reasoningEffort: 'auto', title: '新对话', messages: [], updatedAt: Date.now() }; }
     function currentConversation() { return conversations.find(value => value.id === currentConversationId) || conversations[0]; }
     // 新消息发出后，把该会话待确认的动作全部置为已失效——
         // 服务端生成新动作时也会作废旧动作，前端保持一致，避免点击「执行」一个已不存在的选项。
         function expireActions(conversation) { conversation.messages.forEach(message => {
         if (['PENDING_APPROVAL', 'PENDING_COMMAND_APPROVAL'].includes(message.action?.status)) message.action.status = 'SUPERSEDED';
     }); }
-    function loadConversations() { try { const value = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY)); return Array.isArray(value) ? value.slice(0, MAX_CONVERSATIONS) : []; } catch (_) { return []; } }
+    function loadConversations() { try { const value = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY)); return Array.isArray(value) ? value.slice(0, MAX_CONVERSATIONS).map(conversation => ({ reasoningEffort: 'auto', ...conversation })) : []; } catch (_) { return []; } }
     function persistConversations() { localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations.slice(0, MAX_CONVERSATIONS))); }
 
     async function api(url, options = {}) {
@@ -969,7 +1071,8 @@
         elements.input.placeholder = ready ? '向服务器助手提问' : '请先选择或配置服务器';
         elements.serverSelectButton.disabled = streaming;
         elements.modelSelect.disabled = streaming;
-        if (streaming) closeServerMenu();
+        elements.reasoningSelect.disabled = streaming; elements.modelMenuButton.disabled = streaming;
+        if (streaming) { closeServerMenu(); closeModelMenu(); }
     }
     function resizeComposer() { elements.input.style.height = 'auto'; elements.input.style.height = `${Math.min(elements.input.scrollHeight, 200)}px`; }
     function syncViewportHeight() { const height = window.visualViewport?.height || window.innerHeight; document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`); }
@@ -984,5 +1087,9 @@
     function escapeHtml(value) { return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
     function authLabel(value) { return value === 'PRIVATE_KEY' ? '私钥' : '密码'; }
     function field(id) { return document.querySelector(`#${id}`); }
+    function friendlyRequestError(error) {
+        return error instanceof TypeError || error?.message === 'network error'
+            ? '连接被中断，请检查服务端日志后重试' : (error?.message || '未知错误');
+    }
     function showToast(message, duration = 3500) { clearTimeout(toastTimer); elements.toast.textContent = message; elements.toast.hidden = false; toastTimer = setTimeout(() => { elements.toast.hidden = true; }, duration); }
 })();

@@ -19,5 +19,7 @@ public record ServerContinuationRequest(
         @Size(max = 36, message = "续跑凭证不合法")
         String continuationId,
         @Size(max = 36, message = "模型编号不合法")
-        String modelId
+        String modelId,
+        @Size(max = 20, message = "推理等级不合法")
+        String reasoningEffort
 ) { }

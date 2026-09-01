@@ -16,7 +16,7 @@ public class ServerAssistantProperties {
     private String credentialMasterKey = "";
     private Duration connectTimeout = Duration.ofSeconds(8);
     private Duration commandTimeout = Duration.ofSeconds(30);
-    private Duration sseTimeout = Duration.ofSeconds(120);
+    private Duration sseTimeout = Duration.ofMinutes(10);
     private Duration approvalTtl = Duration.ofMinutes(10);
     private int maxOutputBytes = 16_384;
 
