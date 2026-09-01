@@ -14,6 +14,7 @@ public record PendingServerCommandProposalView(
         String commandName,
         String commandDescription,
         String commandPreview,
+        String parameterSchema,
         String riskLevel,
         String reason,
         Instant expiresAt,

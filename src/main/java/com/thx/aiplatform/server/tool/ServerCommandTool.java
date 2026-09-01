@@ -3,6 +3,7 @@ import com.thx.aiplatform.server.service.SshCommandExecutor;
 import com.thx.aiplatform.server.service.ServerOperationService;
 import com.thx.aiplatform.server.service.ServerConfigurationService;
 import com.thx.aiplatform.server.service.ServerCommandProposalService;
+import com.thx.aiplatform.server.service.ServerCommandTemplateService;
 import com.thx.aiplatform.server.model.ServerDefinition;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
 import com.thx.aiplatform.server.model.ServerCommandDefinition;
@@ -34,12 +35,14 @@ public final class ServerCommandTool {
     private final ServerCommandProposalService commandProposalService;
     private final SshCommandExecutor executor;
     private final ObjectMapper objectMapper;
+    private final ServerCommandTemplateService templateService;
 
-public ServerCommandTool(String conversationId, ServerDefinition server,
+    public ServerCommandTool(String conversationId, ServerDefinition server,
                       ServerConfigurationService configurationService,
                       ServerOperationService operationService, ServerCommandProposalService commandProposalService,
                       SshCommandExecutor executor,
-                      ObjectMapper objectMapper) {
+                      ObjectMapper objectMapper,
+                      ServerCommandTemplateService templateService) {
         this.conversationId = conversationId;
         this.server = server;
         this.configurationService = configurationService;
@@ -47,6 +50,7 @@ public ServerCommandTool(String conversationId, ServerDefinition server,
         this.commandProposalService = commandProposalService;
         this.executor = executor;
         this.objectMapper = objectMapper;
+        this.templateService = templateService;
     }
 
     /**
@@ -56,10 +60,11 @@ public ServerCommandTool(String conversationId, ServerDefinition server,
      */
     @Tool(description = "列出当前对话所选服务器允许执行的命令。只使用返回的命令 ID；没有匹配命令时必须继续调用 proposeCommand，不能只用文字询问是否添加")
     public String listCommands() {
-        List<Map<String, String>> commands = configurationService.enabledCommands(server.id()).stream()
-                .map(command -> Map.of(
+        List<Map<String, Object>> commands = configurationService.enabledCommands(server.id()).stream()
+                .map(command -> Map.<String, Object>of(
                         "id", command.id(), "name", command.name(), "description", command.description(),
-                        "riskLevel", command.riskLevel().name()))
+                        "riskLevel", command.riskLevel().name(),
+                        "parameters", templateService.parameters(command)))
                 .toList();
         Map<String, Object> result = Map.of(
                 "commands", commands,
@@ -77,16 +82,19 @@ public ServerCommandTool(String conversationId, ServerDefinition server,
     @Tool(description = "执行当前服务器已配置的命令。普通命令立即执行；危险命令只生成确认选项，用户点击执行后才会运行")
     public String executeCommand(
             @ToolParam(description = "必须来自 listCommands 的命令 ID") String commandId,
+            @ToolParam(description = "参数 JSON 对象；无参数命令传 {}。键和值必须符合 listCommands 返回的 parameters") String argumentsJson,
             @ToolParam(description = "为什么需要执行，以及已有的判断依据") String reason
     ) {
         ServerCommandDefinition command = configurationService.requireEnabledCommand(server.id(), commandId);
+        String renderedCommand = templateService.render(command, argumentsJson);
         if (command.riskLevel() == ServerCommandRisk.DANGEROUS) {
             commandProposalService.cancelForConversation(conversationId);
-            PendingServerOperationView pending = operationService.prepare(conversationId, server, command, reason);
+            PendingServerOperationView pending = operationService.prepare(
+                    conversationId, server, command, renderedCommand, reason);
             return "已生成危险命令“" + pending.commandName() + "”的确认选项，等待用户确认。"
                     + "不要声称命令已经执行，也不要输出内部操作编号。";
         }
-        return executor.execute(server, command.commandText()).forModel();
+        return executor.execute(server, renderedCommand).forModel();
     }
 
     /**
@@ -97,12 +105,13 @@ public ServerCommandTool(String conversationId, ServerDefinition server,
     public String proposeCommand(
             @ToolParam(description = "便于用户识别的简短命令名称，不超过 80 个字符") String name,
             @ToolParam(description = "命令用途、预期结果和使用场景，不超过 500 个字符") String description,
-            @ToolParam(description = "待添加的完整固定 Shell 命令，不得包含占位符或把用户输入直接拼入命令") String commandText,
+            @ToolParam(description = "固定 Shell 模板。可变参数只能以独占参数形式写成 {{name}}，不能拼接到其他字符中") String commandText,
+            @ToolParam(description = "参数规则 JSON 数组；无参数传 []。类型支持 PATH/ENUM/INTEGER/TEXT；PATH 必须提供 allowedRoots，ENUM 必须提供 allowedValues") String parameterSchema,
             @ToolParam(description = "为什么当前任务需要添加这条命令") String reason
     ) {
         operationService.cancelForConversation(conversationId);
         PendingServerCommandProposalView pending = commandProposalService.prepare(
-                conversationId, server, name, description, commandText, reason);
+                conversationId, server, name, description, commandText, parameterSchema, reason);
         return "已生成命令“" + pending.commandName() + "”的添加确认选项，服务端判定风险等级为 "
                 + pending.riskLevel() + "。等待用户确认，不要声称命令已经保存或执行，也不要输出内部操作编号。";
     }

@@ -34,10 +34,11 @@ class ServerAssistantServiceTest {
         ServerAssistantService service = new ServerAssistantService(
                 chatGateway, registry, mock(ServerConfigurationService.class), mock(ServerOperationService.class),
                 mock(SshCommandExecutor.class), mock(ObjectMapper.class), bindingService,
-                mock(ServerCommandProposalService.class), continuationService);
+                mock(ServerCommandProposalService.class), continuationService,
+                mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class));
 
         service.continueAfterAction(new ServerContinuationRequest(
-                "conversation-1", "server-a", "continuation-1")).blockLast();
+                "conversation-1", "server-a", "continuation-1", null)).blockLast();
 
         ArgumentCaptor<AssistantChatCommand> command = ArgumentCaptor.forClass(AssistantChatCommand.class);
         verify(chatGateway).stream(command.capture(), any(Object[].class));
@@ -56,7 +57,8 @@ class ServerAssistantServiceTest {
         ServerAssistantService service = new ServerAssistantService(
                 chatGateway, mock(ServerRegistry.class), mock(ServerConfigurationService.class),
                 operationService, mock(SshCommandExecutor.class), mock(ObjectMapper.class), bindingService,
-                proposalService, continuationService);
+                proposalService, continuationService,
+                mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class));
 
         service.deleteConversation("conversation-1");
 

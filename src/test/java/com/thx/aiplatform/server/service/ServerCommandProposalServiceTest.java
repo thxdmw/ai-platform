@@ -32,14 +32,14 @@ class ServerCommandProposalServiceTest {
         ServerCommandRiskClassifier classifier = mock(ServerCommandRiskClassifier.class);
         when(classifier.classify("systemctl status nginx --no-pager")).thenReturn(ServerCommandRisk.NORMAL);
         ServerCommandView saved = new ServerCommandView("command-1", "server-a", "查看 Nginx 状态",
-                "查看服务状态", "systemctl status nginx --no-pager", "NORMAL", true, 1000);
+                "查看服务状态", "systemctl status nginx --no-pager", "[]", "NORMAL", true, 1000);
         when(configurationService.createCommand(eq("server-a"), argThat(request ->
                 request.name().equals("查看 Nginx 状态") && request.riskLevel().equals("NORMAL"))))
                 .thenReturn(saved);
         ServerCommandProposalService service = service(configurationService, classifier);
 
         PendingServerCommandProposalView pending = service.prepare("conversation-1", server(),
-                "查看 Nginx 状态", "查看服务状态", "systemctl status nginx --no-pager", "排查服务异常");
+                "查看 Nginx 状态", "查看服务状态", "systemctl status nginx --no-pager", "[]", "排查服务异常");
 
         verifyNoInteractions(configurationService);
         assertThat(pending.serverId()).isEqualTo("server-a");
@@ -58,10 +58,10 @@ class ServerCommandProposalServiceTest {
         when(classifier.classify("reboot")).thenReturn(ServerCommandRisk.DANGEROUS);
         when(configurationService.createCommand(eq("server-a"), argThat(request -> true)))
                 .thenReturn(new ServerCommandView("command-2", "server-a", "重启服务器", "重启",
-                        "reboot", "DANGEROUS", true, 1000));
+                        "reboot", "[]", "DANGEROUS", true, 1000));
         ServerCommandProposalService service = service(configurationService, classifier);
         PendingServerCommandProposalView pending = service.prepare("conversation-1", server(),
-                "重启服务器", "重启", "reboot", "用户要求重启");
+                "重启服务器", "重启", "reboot", "[]", "用户要求重启");
 
         service.approve(pending.actionId());
 
@@ -76,6 +76,7 @@ class ServerCommandProposalServiceTest {
         when(continuationService.prepare(eq("conversation-1"), eq("server-a"), argThat(message ->
                 message.contains("继续完成用户原来的任务")))).thenReturn("continuation-1");
         return new ServerCommandProposalService(configurationService, classifier, properties, continuationService,
+                new ServerCommandTemplateService(new com.fasterxml.jackson.databind.ObjectMapper()),
                 Clock.fixed(Instant.parse("2026-09-01T00:00:00Z"), ZoneOffset.UTC));
     }
 

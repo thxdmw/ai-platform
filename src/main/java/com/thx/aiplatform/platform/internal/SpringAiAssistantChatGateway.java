@@ -6,6 +6,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
@@ -45,7 +48,8 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
     @Override
     public Flux<String> stream(AssistantChatCommand command, Object... tools) {
         String scopedConversationId = scopedConversationId(command.assistantId(), command.conversationId());
-        ChatClient.ChatClientRequestSpec request = chatClient.prompt()
+        ChatClient selectedClient = command.modelConnection() == null ? chatClient : customClient(command);
+        ChatClient.ChatClientRequestSpec request = selectedClient.prompt()
                 .system(command.systemPrompt())
                 .user(command.userMessage())
                 .advisors(spec -> spec.param(ChatMemory.CONVERSATION_ID, scopedConversationId));
@@ -56,6 +60,24 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
                 .stream()
                 .content()
                 .filter(content -> content != null && !content.isBlank());
+    }
+
+    /**
+     * 自定义连接按请求构造，避免把 API 密钥作为缓存键或长期保留在全局对象中。
+     */
+    private ChatClient customClient(AssistantChatCommand command) {
+        var connection = command.modelConnection();
+        OpenAiApi api = OpenAiApi.builder()
+                .baseUrl(connection.baseUrl())
+                .apiKey(connection.apiKey())
+                .completionsPath(connection.chatCompletionsPath())
+                .build();
+        OpenAiChatOptions.Builder options = OpenAiChatOptions.builder().model(connection.model());
+        if (connection.reasoningEffort() != null) options.reasoningEffort(connection.reasoningEffort());
+        OpenAiChatModel model = OpenAiChatModel.builder().openAiApi(api).defaultOptions(options.build()).build();
+        return ChatClient.builder(model)
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
+                .build();
     }
 
     // clear 必须沿用与写入相同的 scoped 规则，否则会清错「别的助手/会话」的记忆。

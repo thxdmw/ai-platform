@@ -10,6 +10,7 @@ public record ServerCommandDefinition(
         String name,
         String description,
         String commandText,
+        String parameterSchema,
         ServerCommandRisk riskLevel,
         boolean enabled,
         int sortOrder

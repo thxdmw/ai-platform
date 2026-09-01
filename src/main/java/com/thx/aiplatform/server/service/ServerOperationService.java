@@ -53,6 +53,12 @@ public class ServerOperationService {
      */
     public PendingServerOperationView prepare(String conversationId, ServerDefinition server,
                                        ServerCommandDefinition command, String reason) {
+        return prepare(conversationId, server, command, command.commandText(), reason);
+    }
+
+    public PendingServerOperationView prepare(String conversationId, ServerDefinition server,
+                                               ServerCommandDefinition command, String renderedCommand,
+                                               String reason) {
         cleanupExpired();
         cancelForConversation(conversationId);
         if (command.riskLevel() != ServerCommandRisk.DANGEROUS) {
@@ -60,7 +66,7 @@ public class ServerOperationService {
         }
         if (operations.size() >= MAX_PENDING_OPERATIONS) throw new IllegalStateException("待确认服务器操作过多，请稍后重试");
         String actionId = UUID.randomUUID().toString();
-        PendingOperation pending = new PendingOperation(actionId, conversationId, server, command,
+        PendingOperation pending = new PendingOperation(actionId, conversationId, server, command, renderedCommand,
                 normalizeReason(reason), clock.instant().plus(properties.getApprovalTtl()));
         operations.put(actionId, pending);
         return toView(pending);
@@ -77,7 +83,7 @@ public class ServerOperationService {
         if (!pending.expiresAt().isAfter(clock.instant())) throw new IllegalArgumentException("服务器操作选项已过期，请重新生成");
         SshExecutionResult result;
         try {
-            result = executor.execute(pending.server(), pending.command().commandText());
+            result = executor.execute(pending.server(), pending.renderedCommand());
         } catch (RuntimeException exception) {
             // 网络中断时远端命令可能已经开始，不能自动重试同一危险操作。
             String continuationId = continuationService.prepare(pending.conversationId(), pending.server().id(),
@@ -118,7 +124,7 @@ public class ServerOperationService {
 
     private PendingServerOperationView toView(PendingOperation pending) {
         return new PendingServerOperationView(pending.actionId(), pending.server().id(), pending.server().name(),
-                pending.command().id(), pending.command().name(), pending.command().commandText(), pending.reason(),
+                pending.command().id(), pending.command().name(), pending.renderedCommand(), pending.reason(),
                 pending.expiresAt(), "PENDING_APPROVAL", "EXECUTE_COMMAND");
     }
 
@@ -144,5 +150,6 @@ public class ServerOperationService {
     }
 
     private record PendingOperation(String actionId, String conversationId, ServerDefinition server,
-                                    ServerCommandDefinition command, String reason, Instant expiresAt) { }
+                                    ServerCommandDefinition command, String renderedCommand,
+                                    String reason, Instant expiresAt) { }
 }

@@ -52,15 +52,18 @@ public class ServerConfigurationService {
     private final ServerCredentialCipher credentialCipher;
     private final SshCommandExecutor executor;
     private final ServerOperationService operationService;
+    private final ServerCommandTemplateService templateService;
 
     ServerConfigurationService(ServerConfigurationRepository repository, ServerRegistry registry,
                                ServerCredentialCipher credentialCipher, SshCommandExecutor executor,
-                               ServerOperationService operationService) {
+                               ServerOperationService operationService,
+                               ServerCommandTemplateService templateService) {
         this.repository = repository;
         this.registry = registry;
         this.credentialCipher = credentialCipher;
         this.executor = executor;
         this.operationService = operationService;
+        this.templateService = templateService;
     }
 
     public List<ServerView> listServers() { return registry.views(); }
@@ -200,7 +203,7 @@ public class ServerConfigurationService {
                 .filter(template -> !existingNames.contains(template.name()))
                 .map(template -> new ServerCommandDefinition(UUID.randomUUID().toString(), serverId,
                         template.name(), template.description(), template.commandText(),
-                        ServerCommandRisk.NORMAL, true, template.sortOrder()))
+                        "[]", ServerCommandRisk.NORMAL, true, template.sortOrder()))
                 .forEach(repository::insertCommand);
     }
 
@@ -216,8 +219,9 @@ public class ServerConfigurationService {
     private ServerCommandDefinition commandDefinition(String id, String serverId, ServerCommandRequest request) {
         String commandText = request.commandText().trim();
         if (commandText.indexOf('\0') >= 0) throw new IllegalArgumentException("命令内容不能包含空字符");
+        String parameterSchema = templateService.normalizeSchema(commandText, request.parameterSchema());
         return new ServerCommandDefinition(id, serverId, request.name().trim(), request.description().trim(),
-                commandText, ServerCommandRisk.parse(request.riskLevel()),
+                commandText, parameterSchema, ServerCommandRisk.parse(request.riskLevel()),
                 request.enabled() == null || request.enabled(), request.sortOrder() == null ? 0 : request.sortOrder());
     }
 
@@ -249,7 +253,8 @@ public class ServerConfigurationService {
 
     private ServerCommandView toView(ServerCommandDefinition command) {
         return new ServerCommandView(command.id(), command.serverId(), command.name(), command.description(),
-                command.commandText(), command.riskLevel().name(), command.enabled(), command.sortOrder());
+                command.commandText(), command.parameterSchema(), command.riskLevel().name(),
+                command.enabled(), command.sortOrder());
     }
 
     private record DefaultCommand(String name, String description, String commandText, int sortOrder) { }

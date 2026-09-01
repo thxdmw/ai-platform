@@ -31,7 +31,7 @@ class ServerConfigurationServiceTest {
                 "服务器 A", "127.0.0.1", 2222, "ops", "PASSWORD", "very-secret", null,
                 "[127.0.0.1]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestHostKeyMaterial", true));
         ServerCommandView command = service.createCommand(server.id(), new ServerCommandRequest(
-                "查看运行时间", "查看服务器运行时间", "uptime", "NORMAL", true, 10));
+                "查看运行时间", "查看服务器运行时间", "uptime", "[]", "NORMAL", true, 10));
 
         ServerDefinition stored = repository.findServer(server.id()).orElseThrow();
         assertThat(stored.credentialCiphertext()).doesNotContain("very-secret").startsWith("v1:");

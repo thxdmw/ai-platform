@@ -81,7 +81,7 @@ public class ServerConfigurationRepository {
 
     public List<ServerCommandDefinition> findCommands(String serverId, boolean onlyEnabled) {
         String sql = """
-                SELECT id, server_id, name, description, command_text, risk_level, enabled, sort_order
+                SELECT id, server_id, name, description, command_text, parameter_schema, risk_level, enabled, sort_order
                 FROM server_assistant_command WHERE server_id = :serverId
                 """ + (onlyEnabled ? " AND enabled = TRUE" : "") + " ORDER BY sort_order, created_at, name";
         return jdbc.sql(sql).param("serverId", serverId).query(this::mapCommand).list();
@@ -89,7 +89,7 @@ public class ServerConfigurationRepository {
 
     public Optional<ServerCommandDefinition> findCommand(String id) {
         return jdbc.sql("""
-                        SELECT id, server_id, name, description, command_text, risk_level, enabled, sort_order
+                        SELECT id, server_id, name, description, command_text, parameter_schema, risk_level, enabled, sort_order
                         FROM server_assistant_command WHERE id = :id
                         """)
                 .param("id", id).query(this::mapCommand).optional();
@@ -98,9 +98,9 @@ public class ServerConfigurationRepository {
     public void insertCommand(ServerCommandDefinition command) {
         jdbc.sql("""
                         INSERT INTO server_assistant_command
-                          (id, server_id, name, description, command_text, risk_level, enabled, sort_order)
+                          (id, server_id, name, description, command_text, parameter_schema, risk_level, enabled, sort_order)
                         VALUES
-                          (:id, :serverId, :name, :description, :commandText, :riskLevel, :enabled, :sortOrder)
+                          (:id, :serverId, :name, :description, :commandText, :parameterSchema, :riskLevel, :enabled, :sortOrder)
                         """)
                 .params(commandParameters(command)).update();
     }
@@ -109,6 +109,7 @@ public class ServerConfigurationRepository {
         int updated = jdbc.sql("""
                         UPDATE server_assistant_command
                         SET name = :name, description = :description, command_text = :commandText,
+                            parameter_schema = :parameterSchema,
                             risk_level = :riskLevel, enabled = :enabled, sort_order = :sortOrder,
                             updated_at = CURRENT_TIMESTAMP
                         WHERE id = :id AND server_id = :serverId
@@ -142,7 +143,8 @@ public class ServerConfigurationRepository {
         return java.util.Map.of(
                 "id", command.id(), "serverId", command.serverId(), "name", command.name(),
                 "description", command.description(), "commandText", command.commandText(),
-                "riskLevel", command.riskLevel().name(), "enabled", command.enabled(), "sortOrder", command.sortOrder());
+                "parameterSchema", command.parameterSchema(), "riskLevel", command.riskLevel().name(),
+                "enabled", command.enabled(), "sortOrder", command.sortOrder());
     }
 
     private ServerDefinition mapServer(ResultSet result, int row) throws SQLException {
@@ -157,6 +159,7 @@ public class ServerConfigurationRepository {
         return new ServerCommandDefinition(
                 result.getString("id"), result.getString("server_id"), result.getString("name"),
                 result.getString("description"), result.getString("command_text"),
+                result.getString("parameter_schema"),
                 ServerCommandRisk.parse(result.getString("risk_level")), result.getBoolean("enabled"),
                 result.getInt("sort_order"));
     }

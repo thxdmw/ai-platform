@@ -22,18 +22,24 @@
         loginError: document.querySelector('#loginError'), toast: document.querySelector('#toast'),
         serverSelectButton: document.querySelector('#serverSelectButton'), serverSelectLabel: document.querySelector('#serverSelectLabel'),
         serverSelectMenu: document.querySelector('#serverSelectMenu'), currentServerMeta: document.querySelector('#currentServerMeta'),
+        modelSelect: document.querySelector('#modelSelect'),
         conversationBulkActions: document.querySelector('#conversationBulkActions'),
         selectAllConversations: document.querySelector('#selectAllConversations'),
         selectedConversationCount: document.querySelector('#selectedConversationCount'),
         deleteSelectedConversations: document.querySelector('#deleteSelectedConversations'),
         settingsOverlay: document.querySelector('#settingsOverlay'), settingsServerList: document.querySelector('#settingsServerList'),
         serverForm: document.querySelector('#serverForm'), commandSection: document.querySelector('#commandSection'),
-        commandList: document.querySelector('#commandList'), commandForm: document.querySelector('#commandForm')
+        commandList: document.querySelector('#commandList'), commandForm: document.querySelector('#commandForm'),
+        modelProviderList: document.querySelector('#modelProviderList'),
+        modelProviderForm: document.querySelector('#modelProviderForm')
     };
 
     let token = sessionStorage.getItem(TOKEN_KEY) || '';
     let servers = [];
     let commands = [];
+    let modelProviders = [];
+    let modelOptions = [];
+    let editingModelProviderId = null;
     let editingServerId = null;
     let editingCommandId = null;
     let conversations = loadConversations();
@@ -68,6 +74,9 @@
         document.querySelector('#addServerButton').addEventListener('click', () => editServer(null));
         document.querySelector('#installDefaultCommandsButton').addEventListener('click', installDefaultCommands);
         document.querySelector('#addCommandButton').addEventListener('click', () => editCommand(null));
+        document.querySelector('#addModelProviderButton').addEventListener('click', () => editModelProvider(null));
+        document.querySelector('#cancelModelProviderButton').addEventListener('click', () => { elements.modelProviderForm.hidden = true; });
+        document.querySelector('#deleteModelProviderButton').addEventListener('click', deleteModelProvider);
         document.querySelector('#cancelCommandButton').addEventListener('click', () => { elements.commandForm.hidden = true; });
         document.querySelector('#deleteServerButton').addEventListener('click', deleteServer);
         document.querySelector('#testServerButton').addEventListener('click', testServer);
@@ -75,7 +84,13 @@
         document.querySelector('#serverAuthType').addEventListener('change', syncAuthenticationFields);
         elements.serverForm.addEventListener('submit', saveServer);
         elements.commandForm.addEventListener('submit', saveCommand);
+        elements.modelProviderForm.addEventListener('submit', saveModelProvider);
         elements.serverSelectButton.addEventListener('click', toggleServerMenu);
+        elements.modelSelect.addEventListener('change', () => {
+            currentConversation().modelId = elements.modelSelect.value || null;
+            currentConversation().updatedAt = Date.now();
+            persistConversations();
+        });
         document.addEventListener('click', event => {
             if (!event.target.closest('.server-picker')) closeServerMenu();
         });
@@ -98,7 +113,7 @@
         if (!token) return showLogin();
         try {
             await api('/api/server/v1/auth/verify', { method: 'POST' });
-            await loadServers();
+            await Promise.all([loadServers(), loadModelProviders()]);
         } catch (error) {
             token = ''; sessionStorage.removeItem(TOKEN_KEY); showLogin(error.message);
         }
@@ -115,7 +130,7 @@
             await api('/api/server/v1/auth/verify', { method: 'POST' });
             sessionStorage.setItem(TOKEN_KEY, token);
             elements.loginOverlay.hidden = true; elements.accessToken.value = '';
-            await loadServers(); elements.input.focus();
+            await Promise.all([loadServers(), loadModelProviders()]); elements.input.focus();
         } catch (error) {
             token = ''; sessionStorage.removeItem(TOKEN_KEY); elements.loginError.textContent = error.message;
         } finally { submit.disabled = false; }
@@ -145,11 +160,109 @@
         renderAll();
     }
 
+    async function loadModelProviders() {
+        modelProviders = await api('/api/server/v1/model-providers');
+        modelOptions = modelProviders.flatMap(provider => provider.enabled
+            ? provider.models.filter(model => model.enabled) : []);
+        renderModelProviders();
+        renderModelSelection();
+    }
+
+    function renderModelSelection() {
+        const selected = currentConversation()?.modelId || '';
+        elements.modelSelect.replaceChildren(new Option('系统默认模型', ''));
+        modelOptions.forEach(model => {
+            const suffix = model.reasoningEffort ? ` · ${model.reasoningEffort}` : '';
+            elements.modelSelect.appendChild(new Option(`${model.providerName} / ${model.name}${suffix}`, model.id));
+        });
+        if (selected && modelOptions.some(model => model.id === selected)) elements.modelSelect.value = selected;
+        else if (selected) {
+            currentConversation().modelId = null;
+            persistConversations();
+        }
+    }
+
+    function renderModelProviders() {
+        elements.modelProviderList.replaceChildren();
+        if (!modelProviders.length) {
+            const empty = document.createElement('p'); empty.className = 'empty-note';
+            empty.textContent = '尚未配置自定义模型，当前使用系统默认模型。';
+            elements.modelProviderList.appendChild(empty); return;
+        }
+        modelProviders.forEach(provider => {
+            const item = document.createElement('button'); item.type = 'button'; item.className = 'command-item';
+            const main = document.createElement('span'); main.className = 'command-item-main';
+            const name = document.createElement('strong'); name.textContent = provider.name + (provider.enabled ? '' : '（停用）');
+            const description = document.createElement('span');
+            description.textContent = `${provider.baseUrl} · ${provider.models.length} 个模型`;
+            main.append(name, description);
+            const badge = document.createElement('span'); badge.className = 'risk-badge'; badge.textContent = 'OpenAI 兼容';
+            item.append(main, badge); item.addEventListener('click', () => editModelProvider(provider.id));
+            elements.modelProviderList.appendChild(item);
+        });
+    }
+
+    function editModelProvider(providerId) {
+        editingModelProviderId = providerId;
+        const provider = modelProviders.find(value => value.id === providerId);
+        elements.modelProviderForm.reset(); elements.modelProviderForm.hidden = false;
+        field('modelProviderId').value = provider?.id || '';
+        field('modelProviderName').value = provider?.name || '';
+        field('modelProviderBaseUrl').value = provider?.baseUrl || '';
+        field('modelProviderPath').value = provider?.chatCompletionsPath || '/v1/chat/completions';
+        field('modelProviderApiKey').value = '';
+        field('modelProviderEnabled').checked = provider?.enabled ?? true;
+        field('modelProviderModels').value = (provider?.models || []).map(model =>
+            `${model.name} | ${model.modelCode} | ${model.reasoningEffort || ''}`).join('\n');
+        field('modelProviderFormError').textContent = '';
+        field('deleteModelProviderButton').hidden = !provider;
+        field('modelProviderName').focus();
+    }
+
+    function parseModelOptions(source) {
+        return source.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map((line, index) => {
+            const parts = line.split('|').map(value => value.trim());
+            if (parts.length < 2 || !parts[0] || !parts[1]) throw new Error(`模型列表第 ${index + 1} 行格式不正确`);
+            return { name: parts[0], modelCode: parts[1], reasoningEffort: parts[2] || null, enabled: true, sortOrder: index };
+        });
+    }
+
+    async function saveModelProvider(event) {
+        event.preventDefault(); field('modelProviderFormError').textContent = '';
+        try {
+            const payload = {
+                name: field('modelProviderName').value.trim(),
+                baseUrl: field('modelProviderBaseUrl').value.trim(),
+                chatCompletionsPath: field('modelProviderPath').value.trim(),
+                apiKey: field('modelProviderApiKey').value || null,
+                enabled: field('modelProviderEnabled').checked,
+                models: parseModelOptions(field('modelProviderModels').value)
+            };
+            await api(editingModelProviderId ? `/api/server/v1/model-providers/${editingModelProviderId}`
+                : '/api/server/v1/model-providers', {
+                method: editingModelProviderId ? 'PUT' : 'POST', body: JSON.stringify(payload)
+            });
+            await loadModelProviders(); elements.modelProviderForm.hidden = true; showToast('模型提供方已保存');
+        } catch (error) { field('modelProviderFormError').textContent = error.message; }
+    }
+
+    async function deleteModelProvider() {
+        const provider = modelProviders.find(value => value.id === editingModelProviderId);
+        if (!provider || !window.confirm(`确定删除模型提供方“${provider.name}”及其模型吗？`)) return;
+        try {
+            await api(`/api/server/v1/model-providers/${provider.id}`, { method: 'DELETE' });
+            editingModelProviderId = null; await loadModelProviders(); elements.modelProviderForm.hidden = true;
+            showToast('模型提供方已删除');
+        } catch (error) { field('modelProviderFormError').textContent = error.message; }
+    }
+
     // 打开设置时默认选中「当前对话的服务器」；没有服务器时进入新增表单。
     async function openSettings() {
         elements.settingsOverlay.hidden = false;
+        await loadModelProviders();
         renderSettingsServerList();
-        const preferred = editingServerId || currentConversation().serverId || servers[0]?.id || null;
+        const candidate = editingServerId || currentConversation().serverId;
+        const preferred = servers.some(server => server.id === candidate) ? candidate : (servers[0]?.id || null);
         await editServer(preferred);
         document.querySelector('.settings-main').scrollTop = 0;
         document.querySelector('.settings-layout').scrollTop = 0;
@@ -298,6 +411,7 @@
         field('commandName').value = command?.name || '';
         field('commandDescription').value = command?.description || '';
         field('commandText').value = command?.commandText || '';
+        field('commandParameterSchema').value = command?.parameterSchema === '[]' ? '' : (command?.parameterSchema || '');
         field('commandRisk').value = command?.riskLevel || 'NORMAL';
         field('commandSortOrder').value = command?.sortOrder || 0;
         field('commandEnabled').checked = command?.enabled ?? true;
@@ -311,6 +425,7 @@
         const payload = {
             name: field('commandName').value.trim(), description: field('commandDescription').value.trim(),
             commandText: field('commandText').value.trim(), riskLevel: field('commandRisk').value,
+            parameterSchema: field('commandParameterSchema').value.trim() || '[]',
             sortOrder: Number(field('commandSortOrder').value || 0), enabled: field('commandEnabled').checked
         };
         try {
@@ -345,6 +460,7 @@
         const conversation = currentConversation();
         const server = servers.find(value => value.id === conversation.serverId && value.enabled);
         if (!server) { showToast('请先为当前对话选择一台已启用的服务器'); return; }
+        if (await resolvePendingActionByText(conversation, text)) return;
         // 把待确认的操作/提议置为「已失效」：服务端在生成新动作时会作废同一对话的旧动作，
         // 前端同步状态，避免用户点击一个服务端已不认的按钮。
         expireActions(conversation);
@@ -360,7 +476,8 @@
         try {
             const response = await fetch('/api/server/v1/messages', {
                 method: 'POST', headers: authHeaders(),
-                body: JSON.stringify({ conversationId: conversation.id, serverId: conversation.serverId, message: text })
+                body: JSON.stringify({ conversationId: conversation.id, serverId: conversation.serverId,
+                    message: text, modelId: conversation.modelId || null })
             });
             if (!response.ok) throw await responseError(response);
             await consumeSse(response, chunk => {
@@ -403,7 +520,24 @@
         onChunk(data); return false;
     }
 
-    function renderAll() { renderHistory(); renderServerSelection(); renderMessages(); updateStreamingState(); }
+    function renderAll() { renderHistory(); renderServerSelection(); renderModelSelection(); renderMessages(); updateStreamingState(); }
+
+    async function resolvePendingActionByText(conversation, text) {
+        const message = [...conversation.messages].reverse().find(value =>
+            ['PENDING_APPROVAL', 'PENDING_COMMAND_APPROVAL'].includes(value.action?.status));
+        if (!message) return false;
+        const compact = text.replace(/[\s，。！!？?]/g, '');
+        const confirm = /^(执行|确认|确认执行|继续执行|同意|添加|确认添加)$/.test(compact);
+        const cancel = /^(取消|不执行|取消执行|不添加|取消添加)$/.test(compact);
+        if (!confirm && !cancel) return false;
+        conversation.messages.push({ role: 'user', content: text });
+        conversation.updatedAt = Date.now(); elements.input.value = ''; resizeComposer();
+        persistConversations(); renderAll();
+        if (message.action.status === 'PENDING_COMMAND_APPROVAL') {
+            if (confirm) await approveCommandProposal(message); else await cancelCommandProposal(message);
+        } else if (confirm) await approveOperation(message); else await cancelOperation(message);
+        return true;
+    }
 
     // 会话没有绑定服务器时自动选第一台启用的；绑定的服务器被停用且会话还没有任何消息时，
         // 允许改绑其他服务器（有过对话的会话则保持原绑定，因为模型记忆里已经认定了那台服务器）。
@@ -560,6 +694,10 @@
         }
         const reason = document.createElement('p'); reason.className = 'operation-reason'; reason.textContent = action.reason; card.appendChild(reason);
         const command = document.createElement('div'); command.className = 'command-preview'; command.textContent = action.commandPreview; card.appendChild(command);
+        if (addingCommand && action.parameterSchema && action.parameterSchema !== '[]') {
+            const parameters = document.createElement('div'); parameters.className = 'command-preview';
+            parameters.textContent = `参数约束：${action.parameterSchema}`; card.appendChild(parameters);
+        }
         if (addingCommand) {
             const risk = document.createElement('div');
             risk.className = `proposal-risk ${action.riskLevel === 'DANGEROUS' ? 'dangerous' : ''}`;
@@ -684,7 +822,8 @@
                 body: JSON.stringify({
                     conversationId: conversation.id,
                     serverId: conversation.serverId,
-                    continuationId
+                    continuationId,
+                    modelId: conversation.modelId || null
                 })
             });
             if (!response.ok) throw await responseError(response);
@@ -802,7 +941,7 @@
             : `已同步删除 ${deletedIds.size} 个对话`);
     }
 
-    function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, title: '新对话', messages: [], updatedAt: Date.now() }; }
+    function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, modelId: null, title: '新对话', messages: [], updatedAt: Date.now() }; }
     function currentConversation() { return conversations.find(value => value.id === currentConversationId) || conversations[0]; }
     // 新消息发出后，把该会话待确认的动作全部置为已失效——
         // 服务端生成新动作时也会作废旧动作，前端保持一致，避免点击「执行」一个已不存在的选项。
@@ -829,6 +968,7 @@
         elements.input.disabled = streaming || !ready; elements.send.disabled = streaming || !ready;
         elements.input.placeholder = ready ? '向服务器助手提问' : '请先选择或配置服务器';
         elements.serverSelectButton.disabled = streaming;
+        elements.modelSelect.disabled = streaming;
         if (streaming) closeServerMenu();
     }
     function resizeComposer() { elements.input.style.height = 'auto'; elements.input.style.height = `${Math.min(elements.input.scrollHeight, 200)}px`; }

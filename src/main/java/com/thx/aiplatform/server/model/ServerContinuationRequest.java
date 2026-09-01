@@ -17,5 +17,7 @@ public record ServerContinuationRequest(
         String serverId,
         @NotBlank(message = "续跑凭证不能为空")
         @Size(max = 36, message = "续跑凭证不合法")
-        String continuationId
+        String continuationId,
+        @Size(max = 36, message = "模型编号不合法")
+        String modelId
 ) { }

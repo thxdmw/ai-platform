@@ -11,7 +11,8 @@ public record AssistantChatCommand(
         String assistantId,
         String conversationId,
         String systemPrompt,
-        String userMessage
+        String userMessage,
+        AssistantModelConnection modelConnection
 ) {
     // 四字段缺一不可，任何来源构造的命令都要在入口拦下非法值（fail-fast）：
     // assistantId/conversationId 决定记忆隔离与上下文，systemPrompt 约束模型行为，userMessage 是用户输入。
@@ -20,5 +21,9 @@ public record AssistantChatCommand(
         Objects.requireNonNull(conversationId, "conversationId 不能为空");
         Objects.requireNonNull(systemPrompt, "systemPrompt 不能为空");
         Objects.requireNonNull(userMessage, "userMessage 不能为空");
+    }
+
+    public AssistantChatCommand(String assistantId, String conversationId, String systemPrompt, String userMessage) {
+        this(assistantId, conversationId, systemPrompt, userMessage, null);
     }
 }

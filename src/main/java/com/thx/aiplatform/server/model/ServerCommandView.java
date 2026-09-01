@@ -10,6 +10,7 @@ public record ServerCommandView(
         String name,
         String description,
         String commandText,
+        String parameterSchema,
         String riskLevel,
         boolean enabled,
         int sortOrder

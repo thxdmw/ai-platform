@@ -32,6 +32,7 @@ public class ServerCommandProposalService {
     private final ServerCommandRiskClassifier riskClassifier;
     private final ServerAssistantProperties properties;
     private final ServerActionContinuationService continuationService;
+    private final ServerCommandTemplateService templateService;
     private final Clock clock;
     private final Map<String, PendingProposal> proposals = new ConcurrentHashMap<>();
 
@@ -39,18 +40,21 @@ public class ServerCommandProposalService {
     ServerCommandProposalService(ServerConfigurationService configurationService,
                                  ServerCommandRiskClassifier riskClassifier,
                                  ServerAssistantProperties properties,
-                                 ServerActionContinuationService continuationService) {
-        this(configurationService, riskClassifier, properties, continuationService, Clock.systemUTC());
+                                 ServerActionContinuationService continuationService,
+                                 ServerCommandTemplateService templateService) {
+        this(configurationService, riskClassifier, properties, continuationService, templateService, Clock.systemUTC());
     }
 
     ServerCommandProposalService(ServerConfigurationService configurationService,
                                  ServerCommandRiskClassifier riskClassifier,
                                  ServerAssistantProperties properties,
-                                 ServerActionContinuationService continuationService, Clock clock) {
+                                 ServerActionContinuationService continuationService,
+                                 ServerCommandTemplateService templateService, Clock clock) {
         this.configurationService = configurationService;
         this.riskClassifier = riskClassifier;
         this.properties = properties;
         this.continuationService = continuationService;
+        this.templateService = templateService;
         this.clock = clock;
     }
 
@@ -60,7 +64,8 @@ public class ServerCommandProposalService {
      * 字符——SSH 通道对 NUL 的处理不可靠，可能截断命令造成行为歧义。
      */
     public PendingServerCommandProposalView prepare(String conversationId, ServerDefinition server, String name,
-                                             String description, String commandText, String reason) {
+                                             String description, String commandText, String parameterSchema,
+                                             String reason) {
         cleanupExpired();
         cancelForConversation(conversationId);
         if (proposals.size() >= MAX_PENDING_PROPOSALS) {
@@ -70,10 +75,13 @@ public class ServerCommandProposalService {
         String normalizedDescription = required(description, "命令用途", 500);
         String normalizedCommand = required(commandText, "命令内容", 8000);
         if (normalizedCommand.indexOf('\0') >= 0) throw new IllegalArgumentException("命令内容不能包含空字符");
-        ServerCommandRisk risk = riskClassifier.classify(normalizedCommand);
+        String normalizedSchema = templateService.normalizeSchema(normalizedCommand, parameterSchema);
+        ServerCommandRisk risk = riskClassifier.classify(
+                templateService.classificationText(normalizedCommand, normalizedSchema));
         String actionId = UUID.randomUUID().toString();
         PendingProposal proposal = new PendingProposal(actionId, conversationId, server, normalizedName,
                 normalizedDescription, normalizedCommand, risk, normalizeReason(reason),
+                normalizedSchema,
                 clock.instant().plus(properties.getApprovalTtl()));
         proposals.put(actionId, proposal);
         return toView(proposal);
@@ -94,7 +102,7 @@ public class ServerCommandProposalService {
         }
         ServerCommandView command = configurationService.createCommand(proposal.server().id(),
                 new ServerCommandRequest(proposal.name(), proposal.description(), proposal.commandText(),
-                        proposal.risk().name(), true, 1000));
+                        proposal.parameterSchema(), proposal.risk().name(), true, 1000));
         proposals.remove(actionId);
         String riskMessage = proposal.risk() == ServerCommandRisk.DANGEROUS
                 ? "该命令属于危险操作，执行时仍需再次确认" : "该命令后续可由助手直接执行";
@@ -124,7 +132,7 @@ public class ServerCommandProposalService {
     private PendingServerCommandProposalView toView(PendingProposal proposal) {
         return new PendingServerCommandProposalView(proposal.actionId(), proposal.server().id(),
                 proposal.server().name(), proposal.name(), proposal.description(), proposal.commandText(),
-                proposal.risk().name(), proposal.reason(), proposal.expiresAt(),
+                proposal.parameterSchema(), proposal.risk().name(), proposal.reason(), proposal.expiresAt(),
                 "PENDING_COMMAND_APPROVAL", "ADD_COMMAND");
     }
 
@@ -152,5 +160,5 @@ public class ServerCommandProposalService {
 
     private record PendingProposal(String actionId, String conversationId, ServerDefinition server, String name,
                                    String description, String commandText, ServerCommandRisk risk, String reason,
-                                   Instant expiresAt) { }
+                                   String parameterSchema, Instant expiresAt) { }
 }

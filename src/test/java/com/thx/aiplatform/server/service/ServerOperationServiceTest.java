@@ -55,7 +55,7 @@ class ServerOperationServiceTest {
         ServerOperationService service = new ServerOperationService(
                 executor, properties(), continuationService(), Clock.systemUTC());
         ServerCommandDefinition command = new ServerCommandDefinition(
-                "command-2", "server-a", "查看状态", "查看状态", "uptime", ServerCommandRisk.NORMAL, true, 0);
+                "command-2", "server-a", "查看状态", "查看状态", "uptime", "[]", ServerCommandRisk.NORMAL, true, 0);
 
         assertThatThrownBy(() -> service.prepare("conversation-1", server(), command, "检查"))
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("不需要");
@@ -88,7 +88,7 @@ class ServerOperationServiceTest {
 
     private ServerCommandDefinition dangerousCommand() {
         return new ServerCommandDefinition("command-1", "server-a", "重启服务", "重启服务",
-                "sudo -n systemctl restart nginx", ServerCommandRisk.DANGEROUS, true, 0);
+                "sudo -n systemctl restart nginx", "[]", ServerCommandRisk.DANGEROUS, true, 0);
     }
 
     private ServerAssistantProperties properties() {
