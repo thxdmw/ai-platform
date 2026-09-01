@@ -221,8 +221,8 @@ public class ServerCommandTemplateService {
 
     private String sampleValue(ServerCommandParameterDefinition definition) {
         return switch (definition.type()) {
-            case ENUM -> definition.allowedValues().getFirst();
-            case PATH -> definition.allowedRoots().getFirst();
+            case ENUM -> definition.allowedValues().get(0);
+            case PATH -> definition.allowedRoots().get(0);
             case INTEGER -> Long.toString(definition.minValue() == null ? 0 : definition.minValue());
             case TEXT -> "sample";
         };
