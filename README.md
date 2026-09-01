@@ -16,9 +16,11 @@
 - 博客概览、搜索、详情、分类与标签的精简只读工具
 - 对话内生成发布选项，用户点击确认后才执行发布
 - ChatGPT 风格的 Markdown、表格、代码块和消息复制
-- 多服务器 SSH 清单、状态与日志查询
-- 白名单服务和容器的对话内重启确认
+- 页面管理多服务器 SSH 连接与加密凭据
+- 新服务器自动提供常用只读命令，也可独立配置固定命令及普通/危险风险等级
+- 对话开始前选择服务器，危险命令在回复中二次确认
 - 严格主机密钥校验、输出截断和命令超时
+- PostgreSQL/H2 持久化与 Flyway 数据库迁移
 
 ## 本地启动
 
@@ -47,13 +49,15 @@ mvn spring-boot:run
 博客助手需要配置 `BLOG_ASSISTANT_ACCESS_TOKEN`、`BLOG_API_BASE_URL` 和
 `BLOG_API_KEY`。访问口令由管理员进入页面时手动输入，只保存在浏览器当前会话中。
 
-服务器助手通过 `SERVER_ASSISTANT_SERVERS_JSON` 配置多台地位相同的受控服务器。每台服务器可以
-独立选择 `username + privateKeyPath` 私钥认证，或 `username + passwordEnv` 密码认证，并分别配置
-允许查看/重启的 systemd 服务和 Docker 容器。`passwordEnv` 填写的是保存密码的环境变量名，真实
-密码不写入 JSON。SSH 文件需挂载到容器的 `/run/ai-platform/ssh`；完整示例见 [.env.example](.env.example)。
+服务器与命令直接在服务器助手页面配置并持久化。每台服务器可独立选择用户名加密码或用户名加私钥；
+密码、私钥和私钥口令使用 `SERVER_CREDENTIAL_MASTER_KEY` 进行 AES-256-GCM 加密后保存，接口不会
+返回明文凭据。生产数据库使用 PostgreSQL，表结构只通过 Flyway 迁移。
 
-服务器助手不开放任意 Shell：模型只可调用固定的状态、进程、Docker、服务状态与日志工具；重启
-白名单目标时只生成一次性确认选项，管理员点击“执行”后服务端才连接 SSH。
+模型不能生成或修改 Shell，只能按 ID 执行页面保存的固定命令。新服务器会自动添加六个常用只读命令，
+已有服务器可一键补齐；普通命令可直接执行，危险命令只生成一次性确认选项，管理员点击“执行”后服务端
+才连接 SSH。对话记录当前仍只保存在浏览器，并支持全选或多选删除；删除时会同步释放服务端模型记忆、
+服务器绑定和待确认操作。
+配置方法与权限说明见 [服务器助手文档](docs/server-assistant.md)。
 
 ## CI/CD
 
@@ -61,7 +65,7 @@ Drone 在 `master` 分支推送时执行 Maven 测试和组件语法检查，全
 
 首次部署前需要：
 
-1. 将 `.env.example` 复制到服务器 `/app/ai-platform/.env` 并填写模型密钥和助手访问配置。
-2. 将服务器助手私钥与 `known_hosts` 放到 `/app/ai-platform/ssh`，私钥只授予部署账号读取权限。
+1. 将 `.env.example` 复制到服务器 `/app/ai-platform/.env`，填写模型、PostgreSQL 和助手配置。
+2. 使用 `openssl rand -base64 32` 生成并妥善备份 `SERVER_CREDENTIAL_MASTER_KEY`。
 3. 在 Drone 中配置 `ssh_host`、`ssh_port`、`ssh_username`、`ssh_password`。
 4. 配置 `ai.thxdxw.cn` DNS 和 Nginx，示例位于 `deploy/nginx/ai.thxdxw.cn.conf.example`。

@@ -35,15 +35,6 @@ if [[ ! -f "${ENV_FILE}" ]]; then
     exit 1
 fi
 
-# SSH 文件只读挂载进容器，模型和浏览器都不会接触私钥内容。
-SSH_CONFIG_DIR="$(sed -n 's/^[[:space:]]*SERVER_ASSISTANT_SSH_DIR=//p' "${ENV_FILE}" | tail -n 1 | tr -d '\r')"
-SSH_CONFIG_DIR="${SSH_CONFIG_DIR:-${SCRIPT_DIR}/../ssh}"
-if [[ "${SSH_CONFIG_DIR}" != /* ]]; then
-    error "SERVER_ASSISTANT_SSH_DIR 必须是宿主机绝对路径。"
-    exit 1
-fi
-mkdir -p "${SSH_CONFIG_DIR}"
-
 APP_NAME="ai-platform"
 CONTAINER_NAME="${APP_NAME}-container"
 STABLE_IMAGE="${APP_NAME}:latest"
@@ -89,7 +80,6 @@ run_container() {
       --network host \
       --env-file "${ENV_FILE}" \
       -e SPRING_PROFILES_ACTIVE=prod \
-      --mount "type=bind,src=${SSH_CONFIG_DIR},dst=/run/ai-platform/ssh,readonly" \
       --restart unless-stopped \
       "${image}"
 }

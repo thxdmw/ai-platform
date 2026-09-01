@@ -14,6 +14,7 @@ target/
 Thumbs.db
 
 logs
+data/
 
 # 敏感配置文件（包含密钥）
 .env

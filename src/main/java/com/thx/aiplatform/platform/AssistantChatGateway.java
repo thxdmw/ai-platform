@@ -7,4 +7,6 @@ public interface AssistantChatGateway {
     Flux<String> stream(AssistantChatCommand command);
 
     Flux<String> stream(AssistantChatCommand command, Object... tools);
+
+    void clear(String assistantId, String conversationId);
 }

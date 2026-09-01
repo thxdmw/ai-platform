@@ -29,13 +29,26 @@
                     <svg viewBox="0 0 24 24" fill="none"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2"/></svg>
                     对话
                 </button>
+                <button id="openSettingsButton" class="nav-item" type="button">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 15.5A3.5 3.5 0 1012 8a3.5 3.5 0 000 7.5z" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.7 1.7 0 00.34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 00-1.88-.34 1.7 1.7 0 00-1.03 1.56V20h-3v-.09a1.7 1.7 0 00-1.03-1.56 1.7 1.7 0 00-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 007 14.7a1.7 1.7 0 00-1.56-1.03H5v-3h.09A1.7 1.7 0 006.65 9.6a1.7 1.7 0 00-.34-1.88l-.06-.06 2.12-2.12.06.06a1.7 1.7 0 001.88.34A1.7 1.7 0 0011.34 4.4V4h3v.09a1.7 1.7 0 001.03 1.56 1.7 1.7 0 001.88-.34l.06-.06 2.12 2.12-.06.06a1.7 1.7 0 00-.34 1.88 1.7 1.7 0 001.56 1.03H20v3h-.09A1.7 1.7 0 0018.35 14.7z" stroke="currentColor" stroke-width="1.5"/></svg>
+                    服务器配置
+                </button>
             </nav>
             <section class="server-list-section">
                 <div class="history-header"><span>已配置服务器</span></div>
                 <div id="serverList" class="server-list"><p class="empty-note">登录后读取</p></div>
             </section>
             <section class="chat-history-section">
-                <div class="history-header"><span>近期对话</span></div>
+                <div class="history-header conversation-history-header">
+                    <span>近期对话</span>
+                    <button id="manageConversationsButton" class="history-manage-button" type="button">管理</button>
+                </div>
+                <div id="conversationBulkActions" class="conversation-bulk-actions" hidden>
+                    <label><input id="selectAllConversations" type="checkbox"> 全选</label>
+                    <span id="selectedConversationCount">已选 0 项</span>
+                    <button id="deleteSelectedConversations" type="button" disabled>删除</button>
+                    <button id="cancelConversationManagement" type="button">完成</button>
+                </div>
                 <div id="historyList" class="chat-history-list"></div>
             </section>
             <div class="sidebar-footer">
@@ -59,17 +72,30 @@
             <svg viewBox="0 0 24 24" fill="none"><path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2"/></svg>
         </button>
         <section class="chat-view">
-            <header class="view-header"><div><h1 class="view-title">智能服务器助手</h1><p class="view-subtitle">多服务器诊断与受控 SSH 操作</p></div></header>
+            <header class="view-header server-view-header">
+                <div><h1 class="view-title">智能服务器助手</h1><p id="currentServerMeta" class="view-subtitle">请选择本次对话使用的服务器</p></div>
+                <div class="server-picker">
+                    <span class="server-picker-label">当前服务器</span>
+                    <div class="server-select">
+                        <button id="serverSelectButton" class="server-select-button" type="button" aria-label="当前服务器" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="server-select-status"></span>
+                            <span id="serverSelectLabel" class="server-select-label">请选择服务器</span>
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 10l5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div id="serverSelectMenu" class="server-select-menu" role="listbox" aria-label="选择当前服务器" hidden></div>
+                    </div>
+                </div>
+            </header>
             <div id="chatContainer" class="chat-container centered">
                 <div id="welcome" class="welcome-greeting">
                     <span class="welcome-status">SSH · STRICT HOST KEY</span>
-                    <h2>需要检查哪台服务器？</h2>
-                    <p>我可以查看状态和日志；重启服务或容器会在对话中等待你确认</p>
+                    <h2>选择服务器后开始对话</h2>
+                    <p>助手只会执行你在配置页面授权的命令；危险命令会在对话中等待确认</p>
                     <div class="quick-questions">
-                        <button type="button" data-question="列出所有可以管理的服务器和允许操作的服务">查看服务器清单</button>
-                        <button type="button" data-question="检查所有服务器的运行时间、内存和磁盘使用情况">执行健康巡检</button>
-                        <button type="button" data-question="查看指定服务器上正在运行的 Docker 容器，请先询问服务器">查看容器状态</button>
-                        <button type="button" data-question="帮我分析某个服务的异常日志，请先询问服务器和服务名">分析服务日志</button>
+                        <button type="button" data-question="列出当前服务器可以执行的命令">查看可用命令</button>
+                        <button type="button" data-question="检查当前服务器的运行状态">执行健康巡检</button>
+                        <button type="button" data-question="查看当前服务器的容器状态">查看容器状态</button>
+                        <button type="button" data-question="分析当前服务器最近的异常日志">分析异常日志</button>
                     </div>
                 </div>
                 <div id="messages" class="chat-messages" aria-live="polite"></div>
@@ -95,6 +121,70 @@
         <p id="loginError" class="form-error" role="alert"></p>
         <button class="primary-button" type="submit">验证并进入</button>
     </form>
+</div>
+<div id="settingsOverlay" class="modal-overlay settings-overlay" hidden>
+    <section class="settings-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <header class="settings-header">
+            <div><h2 id="settingsTitle">服务器与命令配置</h2><p>配置会持久化；SSH 凭据加密保存且不会返回页面。</p></div>
+            <button id="closeSettingsButton" class="settings-close" type="button" aria-label="关闭服务器配置">×</button>
+        </header>
+        <div class="settings-layout">
+            <aside class="settings-server-sidebar">
+                <button id="addServerButton" class="settings-add" type="button">＋ 添加服务器</button>
+                <div id="settingsServerList" class="settings-server-list"></div>
+            </aside>
+            <main class="settings-main">
+                <form id="serverForm" class="settings-form">
+                    <input id="serverId" type="hidden">
+                    <div class="settings-section-title"><div><h3>连接配置</h3><p id="serverFormHint">新增服务器时请填写完整凭据</p></div></div>
+                    <div class="form-grid">
+                        <label>服务器名称<input id="serverName" maxlength="80" required></label>
+                        <label>服务器地址<input id="serverHost" maxlength="255" placeholder="IP 或域名" required></label>
+                        <label>SSH 端口<input id="serverPort" type="number" min="1" max="65535" value="22" required></label>
+                        <label>SSH 用户名<input id="serverUsername" maxlength="128" required></label>
+                        <label>认证方式<select id="serverAuthType"><option value="PASSWORD">用户名和密码</option><option value="PRIVATE_KEY">用户名和私钥</option></select></label>
+                        <label class="checkbox-label"><input id="serverEnabled" type="checkbox" checked> 启用该服务器</label>
+                        <label class="form-wide"><span id="credentialLabel">SSH 密码</span><textarea id="serverCredential" rows="4" maxlength="20000" autocomplete="new-password" placeholder="编辑时留空表示不修改"></textarea></label>
+                        <label id="passphraseField" class="form-wide" hidden>私钥口令（可选）<input id="serverPassphrase" type="password" maxlength="1000" autocomplete="new-password"></label>
+                        <label class="form-wide">SSH 主机公钥记录<textarea id="serverHostKey" rows="3" maxlength="4096" placeholder="粘贴 ssh-keyscan 输出的完整一行，例如：[host]:2222 ssh-ed25519 AAAA..." required></textarea><small>请先通过云控制台核对主机指纹，不能只信任网络扫描结果。</small></label>
+                    </div>
+                    <p id="serverFormError" class="form-error" role="alert"></p>
+                    <div class="settings-form-actions">
+                        <button id="deleteServerButton" class="danger-button" type="button" hidden>删除服务器</button>
+                        <button id="testServerButton" class="secondary-button" type="button" hidden>测试连接</button>
+                        <button class="primary-button compact" type="submit">保存服务器</button>
+                    </div>
+                </form>
+                <section id="commandSection" class="command-settings" hidden>
+                    <div class="settings-section-title">
+                        <div><h3>允许执行的命令</h3><p>新服务器自带常用只读命令；危险命令仍需手动添加并在对话中确认。</p></div>
+                        <div class="command-heading-actions">
+                            <button id="installDefaultCommandsButton" class="secondary-button" type="button">补充常用命令</button>
+                            <button id="addCommandButton" class="secondary-button" type="button">自定义命令</button>
+                        </div>
+                    </div>
+                    <div id="commandList" class="command-list"></div>
+                    <form id="commandForm" class="settings-form command-form" hidden>
+                        <input id="commandId" type="hidden">
+                        <div class="form-grid">
+                            <label>命令名称<input id="commandName" maxlength="80" required></label>
+                            <label>风险等级<select id="commandRisk"><option value="NORMAL">普通：直接执行</option><option value="DANGEROUS">危险：对话内确认</option></select></label>
+                            <label class="form-wide">用途说明<textarea id="commandDescription" rows="2" maxlength="500" required></textarea></label>
+                            <label class="form-wide">固定命令内容<textarea id="commandText" class="command-editor" rows="5" maxlength="8000" required></textarea></label>
+                            <label>排序<input id="commandSortOrder" type="number" min="-10000" max="10000" value="0"></label>
+                            <label class="checkbox-label"><input id="commandEnabled" type="checkbox" checked> 启用该命令</label>
+                        </div>
+                        <p id="commandFormError" class="form-error" role="alert"></p>
+                        <div class="settings-form-actions">
+                            <button id="deleteCommandButton" class="danger-button" type="button" hidden>删除命令</button>
+                            <button id="cancelCommandButton" class="secondary-button" type="button">取消</button>
+                            <button class="primary-button compact" type="submit">保存命令</button>
+                        </div>
+                    </form>
+                </section>
+            </main>
+        </div>
+    </section>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
 </body>

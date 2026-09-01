@@ -8,7 +8,7 @@ import java.time.Duration;
 public class ServerAssistantProperties {
 
     private String accessToken = "";
-    private String serversJson = "[]";
+    private String credentialMasterKey = "";
     private Duration connectTimeout = Duration.ofSeconds(8);
     private Duration commandTimeout = Duration.ofSeconds(30);
     private Duration sseTimeout = Duration.ofSeconds(120);
@@ -17,8 +17,8 @@ public class ServerAssistantProperties {
 
     public String getAccessToken() { return accessToken; }
     public void setAccessToken(String accessToken) { this.accessToken = trim(accessToken); }
-    public String getServersJson() { return serversJson; }
-    public void setServersJson(String serversJson) { this.serversJson = serversJson == null || serversJson.isBlank() ? "[]" : serversJson.trim(); }
+    public String getCredentialMasterKey() { return credentialMasterKey; }
+    public void setCredentialMasterKey(String value) { this.credentialMasterKey = trim(value); }
     public Duration getConnectTimeout() { return connectTimeout; }
     public void setConnectTimeout(Duration value) { this.connectTimeout = positive(value, "SSH 连接超时"); }
     public Duration getCommandTimeout() { return commandTimeout; }

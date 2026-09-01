@@ -1,0 +1,10 @@
+spring:
+  ai:
+    model:
+      chat: ollama
+  datasource:
+    url: jdbc:h2:mem:ai-platform-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  flyway:
+    clean-disabled: false

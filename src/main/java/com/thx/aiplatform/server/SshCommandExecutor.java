@@ -6,6 +6,7 @@ import com.jcraft.jsch.Session;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -17,40 +18,47 @@ import java.util.Arrays;
 class SshCommandExecutor {
 
     private final ServerAssistantProperties properties;
+    private final ServerCredentialCipher credentialCipher;
     private final Clock clock;
 
     @Autowired
-    SshCommandExecutor(ServerAssistantProperties properties) {
-        this(properties, Clock.systemUTC());
+    SshCommandExecutor(ServerAssistantProperties properties, ServerCredentialCipher credentialCipher) {
+        this(properties, credentialCipher, Clock.systemUTC());
     }
 
-    SshCommandExecutor(ServerAssistantProperties properties, Clock clock) {
+    SshCommandExecutor(ServerAssistantProperties properties, ServerCredentialCipher credentialCipher, Clock clock) {
         this.properties = properties;
+        this.credentialCipher = credentialCipher;
         this.clock = clock;
+    }
+
+    void testConnection(ServerDefinition server) {
+        Session session = null;
+        byte[] credential = null;
+        byte[] passphrase = null;
+        try {
+            credential = credentialCipher.decrypt(server.credentialCiphertext());
+            passphrase = decryptOptional(server.passphraseCiphertext());
+            session = connect(server, credential, passphrase);
+        } catch (Exception exception) {
+            throw new IllegalStateException("SSH 连接失败：" + safeMessage(exception));
+        } finally {
+            if (session != null) session.disconnect();
+            clear(credential);
+            clear(passphrase);
+        }
     }
 
     SshExecutionResult execute(ServerDefinition server, String command) {
         Session session = null;
         ChannelExec channel = null;
-        byte[] password = null;
+        byte[] credential = null;
         byte[] passphrase = null;
         long started = clock.millis();
         try {
-            JSch jsch = new JSch();
-            jsch.setKnownHosts(server.knownHostsPath());
-            if (server.privateKeyPath() != null) {
-                passphrase = secret(server.passphraseEnv(), server.passphraseEnv() != null);
-                jsch.addIdentity(server.privateKeyPath(), passphrase);
-            }
-            session = jsch.getSession(server.username(), server.host(), server.port());
-            if (server.passwordEnv() != null) {
-                password = secret(server.passwordEnv(), true);
-                session.setPassword(password);
-            }
-            session.setConfig("StrictHostKeyChecking", "yes");
-            session.setConfig("PreferredAuthentications", "publickey,password,keyboard-interactive");
-            session.connect(Math.toIntExact(properties.getConnectTimeout().toMillis()));
-
+            credential = credentialCipher.decrypt(server.credentialCiphertext());
+            passphrase = decryptOptional(server.passphraseCiphertext());
+            session = connect(server, credential, passphrase);
             channel = (ChannelExec) session.openChannel("exec");
             channel.setCommand(command);
             channel.setInputStream(null);
@@ -68,9 +76,33 @@ class SshCommandExecutor {
         } finally {
             if (channel != null) channel.disconnect();
             if (session != null) session.disconnect();
-            if (password != null) Arrays.fill(password, (byte) 0);
-            if (passphrase != null) Arrays.fill(passphrase, (byte) 0);
+            clear(credential);
+            clear(passphrase);
         }
+    }
+
+    private Session connect(ServerDefinition server, byte[] credential, byte[] passphrase) throws Exception {
+        JSch jsch = new JSch();
+        jsch.setKnownHosts(new ByteArrayInputStream(server.hostKey().getBytes(StandardCharsets.UTF_8)));
+        if (server.authenticationType() == ServerAuthenticationType.PRIVATE_KEY) {
+            jsch.addIdentity("server-" + server.id(), credential, null, passphrase);
+        }
+        Session session = jsch.getSession(server.username(), server.host(), server.port());
+        try {
+            if (server.authenticationType() == ServerAuthenticationType.PASSWORD) session.setPassword(credential);
+            session.setConfig("StrictHostKeyChecking", "yes");
+            session.setConfig("PreferredAuthentications",
+                    server.authenticationType() == ServerAuthenticationType.PRIVATE_KEY ? "publickey" : "password,keyboard-interactive");
+            session.connect(Math.toIntExact(properties.getConnectTimeout().toMillis()));
+            return session;
+        } catch (Exception exception) {
+            session.disconnect();
+            throw exception;
+        }
+    }
+
+    private byte[] decryptOptional(String ciphertext) {
+        return ciphertext == null || ciphertext.isBlank() ? null : credentialCipher.decrypt(ciphertext);
     }
 
     private CapturedOutput capture(ChannelExec channel, InputStream stdout, InputStream stderr,
@@ -80,8 +112,8 @@ class SshCommandExecutor {
         ByteArrayOutputStream err = new ByteArrayOutputStream();
         boolean truncated = false;
         while (true) {
-            truncated |= drain(stdout, out, maxBytes);
-            truncated |= drain(stderr, err, maxBytes);
+            truncated |= drain(stdout, out, Math.max(0, maxBytes - out.size() - err.size()));
+            truncated |= drain(stderr, err, Math.max(0, maxBytes - out.size() - err.size()));
             if (channel.isClosed() && stdout.available() == 0 && stderr.available() == 0) break;
             if (System.nanoTime() >= deadline) throw new IllegalStateException("SSH 命令执行超时");
             Thread.sleep(25);
@@ -89,28 +121,22 @@ class SshCommandExecutor {
         return new CapturedOutput(out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8), truncated);
     }
 
-    private boolean drain(InputStream input, ByteArrayOutputStream output, int maxBytes) throws Exception {
+    private boolean drain(InputStream input, ByteArrayOutputStream output, int remainingCapacity) throws Exception {
         boolean truncated = false;
+        int capacity = remainingCapacity;
         byte[] buffer = new byte[2_048];
         while (input.available() > 0) {
             int read = input.read(buffer, 0, Math.min(buffer.length, input.available()));
             if (read < 0) break;
-            int remaining = maxBytes - output.size();
-            if (remaining > 0) output.write(buffer, 0, Math.min(read, remaining));
-            if (read > remaining) truncated = true;
+            int writable = Math.min(read, Math.max(0, capacity));
+            if (writable > 0) output.write(buffer, 0, writable);
+            capacity -= writable;
+            if (read > writable) truncated = true;
         }
         return truncated;
     }
 
-    private byte[] secret(String environmentName, boolean required) {
-        if (environmentName == null) return null;
-        String value = System.getenv(environmentName);
-        if (value == null || value.isBlank()) {
-            if (required) throw new IllegalStateException("SSH 密码环境变量未配置：" + environmentName);
-            return null;
-        }
-        return value.getBytes(StandardCharsets.UTF_8);
-    }
+    private void clear(byte[] value) { if (value != null) Arrays.fill(value, (byte) 0); }
 
     private String safeMessage(Exception exception) {
         String message = exception.getMessage();

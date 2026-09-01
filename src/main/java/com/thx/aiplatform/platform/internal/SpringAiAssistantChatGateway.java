@@ -15,9 +15,10 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
     private static final int MEMORY_MESSAGE_LIMIT = 20;
 
     private final ChatClient chatClient;
+    private final ChatMemory memory;
 
     SpringAiAssistantChatGateway(ChatClient.Builder builder) {
-        MessageWindowChatMemory memory = MessageWindowChatMemory.builder()
+        this.memory = MessageWindowChatMemory.builder()
                 .maxMessages(MEMORY_MESSAGE_LIMIT)
                 .build();
         this.chatClient = builder
@@ -32,7 +33,7 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
 
     @Override
     public Flux<String> stream(AssistantChatCommand command, Object... tools) {
-        String scopedConversationId = command.assistantId() + ":" + command.conversationId();
+        String scopedConversationId = scopedConversationId(command.assistantId(), command.conversationId());
         ChatClient.ChatClientRequestSpec request = chatClient.prompt()
                 .system(command.systemPrompt())
                 .user(command.userMessage())
@@ -44,5 +45,14 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
                 .stream()
                 .content()
                 .filter(content -> content != null && !content.isBlank());
+    }
+
+    @Override
+    public void clear(String assistantId, String conversationId) {
+        memory.clear(scopedConversationId(assistantId, conversationId));
+    }
+
+    private String scopedConversationId(String assistantId, String conversationId) {
+        return assistantId + ":" + conversationId;
     }
 }

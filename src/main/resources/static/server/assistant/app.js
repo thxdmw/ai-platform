@@ -12,14 +12,29 @@
         messages: document.querySelector('#messages'), input: document.querySelector('#messageInput'),
         send: document.querySelector('#sendButton'), loginOverlay: document.querySelector('#loginOverlay'),
         loginForm: document.querySelector('#loginForm'), accessToken: document.querySelector('#accessToken'),
-        loginError: document.querySelector('#loginError'), toast: document.querySelector('#toast')
+        loginError: document.querySelector('#loginError'), toast: document.querySelector('#toast'),
+        serverSelectButton: document.querySelector('#serverSelectButton'), serverSelectLabel: document.querySelector('#serverSelectLabel'),
+        serverSelectMenu: document.querySelector('#serverSelectMenu'), currentServerMeta: document.querySelector('#currentServerMeta'),
+        conversationBulkActions: document.querySelector('#conversationBulkActions'),
+        selectAllConversations: document.querySelector('#selectAllConversations'),
+        selectedConversationCount: document.querySelector('#selectedConversationCount'),
+        deleteSelectedConversations: document.querySelector('#deleteSelectedConversations'),
+        settingsOverlay: document.querySelector('#settingsOverlay'), settingsServerList: document.querySelector('#settingsServerList'),
+        serverForm: document.querySelector('#serverForm'), commandSection: document.querySelector('#commandSection'),
+        commandList: document.querySelector('#commandList'), commandForm: document.querySelector('#commandForm')
     };
 
     let token = sessionStorage.getItem(TOKEN_KEY) || '';
+    let servers = [];
+    let commands = [];
+    let editingServerId = null;
+    let editingCommandId = null;
     let conversations = loadConversations();
     if (!conversations.length) conversations.push(createConversation());
     let currentConversationId = conversations[0].id;
     let streaming = false;
+    let managingConversations = false;
+    const selectedConversationIds = new Set();
     let toastTimer;
 
     if (window.marked) window.marked.setOptions({ gfm: true, breaks: true });
@@ -33,10 +48,31 @@
         window.visualViewport?.addEventListener('resize', syncViewportHeight);
         document.querySelector('#newChatButton').addEventListener('click', newConversation);
         elements.send.addEventListener('click', sendCurrentMessage);
-        document.querySelector('#toggleSidebar').addEventListener('click', () => elements.sidebar.classList.toggle('collapsed'));
+        document.querySelector('#toggleSidebar').addEventListener('click', toggleSidebar);
         document.querySelector('#mobileMenu').addEventListener('click', openMobileSidebar);
         document.querySelector('#closeSidebar').addEventListener('click', closeMobileSidebar);
+        document.querySelector('#manageConversationsButton').addEventListener('click', () => setConversationManagement(true));
+        document.querySelector('#cancelConversationManagement').addEventListener('click', () => setConversationManagement(false));
+        elements.selectAllConversations.addEventListener('change', toggleAllConversations);
+        elements.deleteSelectedConversations.addEventListener('click', deleteSelectedConversations);
         document.querySelector('#logoutButton').addEventListener('click', logout);
+        document.querySelector('#openSettingsButton').addEventListener('click', openSettings);
+        document.querySelector('#closeSettingsButton').addEventListener('click', closeSettings);
+        document.querySelector('#addServerButton').addEventListener('click', () => editServer(null));
+        document.querySelector('#installDefaultCommandsButton').addEventListener('click', installDefaultCommands);
+        document.querySelector('#addCommandButton').addEventListener('click', () => editCommand(null));
+        document.querySelector('#cancelCommandButton').addEventListener('click', () => { elements.commandForm.hidden = true; });
+        document.querySelector('#deleteServerButton').addEventListener('click', deleteServer);
+        document.querySelector('#testServerButton').addEventListener('click', testServer);
+        document.querySelector('#deleteCommandButton').addEventListener('click', deleteCommand);
+        document.querySelector('#serverAuthType').addEventListener('change', syncAuthenticationFields);
+        elements.serverForm.addEventListener('submit', saveServer);
+        elements.commandForm.addEventListener('submit', saveCommand);
+        elements.serverSelectButton.addEventListener('click', toggleServerMenu);
+        document.addEventListener('click', event => {
+            if (!event.target.closest('.server-picker')) closeServerMenu();
+        });
+        document.addEventListener('keydown', event => { if (event.key === 'Escape') closeServerMenu(); });
         elements.sidebarOverlay.addEventListener('click', closeMobileSidebar);
         document.querySelectorAll('[data-question]').forEach(button => button.addEventListener('click', () => {
             elements.input.value = button.dataset.question || '';
@@ -79,21 +115,210 @@
     }
 
     async function loadServers() {
-        const servers = await api('/api/server/v1/servers');
+        servers = await api('/api/server/v1/servers');
         elements.serverList.replaceChildren();
+        renderServerMenu();
         if (!servers.length) {
             const empty = document.createElement('p'); empty.className = 'empty-note';
-            empty.textContent = '尚未配置服务器'; elements.serverList.appendChild(empty); return;
+            empty.textContent = '尚未配置服务器'; elements.serverList.appendChild(empty);
+            ensureConversationServer(); renderAll(); return;
         }
         servers.forEach(server => {
-            const item = document.createElement('div'); item.className = 'server-item';
+            const item = document.createElement('button'); item.type = 'button';
+            item.className = 'server-item' + (!server.enabled ? ' disabled' : '');
             const name = document.createElement('strong');
             const dot = document.createElement('span'); dot.className = 'server-dot';
             name.append(dot, document.createTextNode(server.name));
             const address = document.createElement('span');
-            address.textContent = `${server.username}@${server.host}:${server.port} · ${server.id}`;
+            address.textContent = `${server.username}@${server.host}:${server.port} · ${authLabel(server.authenticationType)}`;
+            item.addEventListener('click', () => { if (server.enabled) selectServer(server.id); });
             item.append(name, address); elements.serverList.appendChild(item);
         });
+        ensureConversationServer();
+        renderAll();
+    }
+
+    async function openSettings() {
+        elements.settingsOverlay.hidden = false;
+        renderSettingsServerList();
+        const preferred = editingServerId || currentConversation().serverId || servers[0]?.id || null;
+        await editServer(preferred);
+        document.querySelector('.settings-main').scrollTop = 0;
+        document.querySelector('.settings-layout').scrollTop = 0;
+    }
+
+    function closeSettings() { elements.settingsOverlay.hidden = true; }
+
+    function renderSettingsServerList() {
+        elements.settingsServerList.replaceChildren();
+        if (!servers.length) {
+            const empty = document.createElement('p'); empty.className = 'empty-note'; empty.textContent = '还没有服务器配置';
+            elements.settingsServerList.appendChild(empty); return;
+        }
+        servers.forEach(server => {
+            const button = document.createElement('button'); button.type = 'button';
+            button.className = 'settings-server-option' + (server.id === editingServerId ? ' active' : '');
+            const name = document.createElement('strong'); name.textContent = server.name + (server.enabled ? '' : '（停用）');
+            const address = document.createElement('span'); address.textContent = `${server.host}:${server.port}`;
+            button.append(name, address); button.addEventListener('click', () => editServer(server.id));
+            elements.settingsServerList.appendChild(button);
+        });
+    }
+
+    async function editServer(serverId) {
+        editingServerId = serverId;
+        editingCommandId = null;
+        const server = servers.find(value => value.id === serverId);
+        elements.serverForm.reset();
+        field('serverId').value = server?.id || '';
+        field('serverName').value = server?.name || '';
+        field('serverHost').value = server?.host || '';
+        field('serverPort').value = server?.port || 22;
+        field('serverUsername').value = server?.username || '';
+        field('serverAuthType').value = server?.authenticationType || 'PASSWORD';
+        field('serverCredential').value = '';
+        field('serverPassphrase').value = '';
+        field('serverHostKey').value = server?.hostKey || '';
+        field('serverEnabled').checked = server?.enabled ?? true;
+        field('serverFormHint').textContent = server
+            ? '凭据留空表示继续使用已加密保存的值' : '新增服务器时请填写完整凭据';
+        field('serverFormError').textContent = '';
+        field('deleteServerButton').hidden = !server;
+        field('testServerButton').hidden = !server;
+        elements.commandSection.hidden = !server;
+        elements.commandForm.hidden = true;
+        syncAuthenticationFields();
+        renderSettingsServerList();
+        if (server) await loadCommands(server.id); else { commands = []; renderCommands(); }
+        document.querySelector('.settings-main').scrollTop = 0;
+        document.querySelector('.settings-layout').scrollTop = 0;
+    }
+
+    function syncAuthenticationFields() {
+        const privateKey = field('serverAuthType').value === 'PRIVATE_KEY';
+        field('credentialLabel').textContent = privateKey ? 'SSH 私钥内容' : 'SSH 密码';
+        field('serverCredential').rows = privateKey ? 8 : 3;
+        field('serverCredential').placeholder = privateKey
+            ? '粘贴 PEM/OpenSSH 私钥；编辑时留空表示不修改' : '编辑时留空表示不修改';
+        field('passphraseField').hidden = !privateKey;
+    }
+
+    async function saveServer(event) {
+        event.preventDefault(); field('serverFormError').textContent = '';
+        const payload = {
+            name: field('serverName').value.trim(), host: field('serverHost').value.trim(),
+            port: Number(field('serverPort').value), username: field('serverUsername').value.trim(),
+            authenticationType: field('serverAuthType').value,
+            credential: field('serverCredential').value || null,
+            privateKeyPassphrase: field('serverPassphrase').value || null,
+            hostKey: field('serverHostKey').value.trim(), enabled: field('serverEnabled').checked
+        };
+        const submit = elements.serverForm.querySelector('button[type="submit"]'); submit.disabled = true;
+        try {
+            const saved = await api(editingServerId ? `/api/server/v1/servers/${editingServerId}` : '/api/server/v1/servers', {
+                method: editingServerId ? 'PUT' : 'POST', body: JSON.stringify(payload)
+            });
+            await loadServers(); await editServer(saved.id); showToast('服务器配置已保存');
+        } catch (error) { field('serverFormError').textContent = error.message; }
+        finally { submit.disabled = false; }
+    }
+
+    async function deleteServer() {
+        const server = servers.find(value => value.id === editingServerId);
+        if (!server || !window.confirm(`确定删除“${server.name}”及其全部命令吗？`)) return;
+        try {
+            await api(`/api/server/v1/servers/${server.id}`, { method: 'DELETE' });
+            editingServerId = null; await loadServers(); await editServer(servers[0]?.id || null); showToast('服务器已删除');
+        } catch (error) { field('serverFormError').textContent = error.message; }
+    }
+
+    async function testServer() {
+        if (!editingServerId) return;
+        const button = field('testServerButton'); button.disabled = true;
+        try {
+            const result = await api(`/api/server/v1/servers/${editingServerId}/test`, { method: 'POST' });
+            showToast(result.message, 5000);
+        } catch (error) { field('serverFormError').textContent = error.message; }
+        finally { button.disabled = false; }
+    }
+
+    async function loadCommands(serverId) {
+        commands = await api(`/api/server/v1/servers/${serverId}/commands`); renderCommands();
+    }
+
+    async function installDefaultCommands() {
+        if (!editingServerId) return;
+        const button = field('installDefaultCommandsButton');
+        const previousCount = commands.length;
+        button.disabled = true;
+        try {
+            commands = await api(`/api/server/v1/servers/${editingServerId}/commands/defaults`, { method: 'POST' });
+            renderCommands();
+            const addedCount = commands.length - previousCount;
+            showToast(addedCount ? `已补充 ${addedCount} 个常用只读命令` : '常用只读命令已经齐全');
+        } catch (error) { field('commandFormError').textContent = error.message; }
+        finally { button.disabled = false; }
+    }
+
+    function renderCommands() {
+        elements.commandList.replaceChildren();
+        if (!commands.length) {
+            const empty = document.createElement('p'); empty.className = 'empty-note';
+            empty.textContent = editingServerId ? '尚未配置命令，可一键补充常用只读命令。' : '请先保存服务器';
+            elements.commandList.appendChild(empty); return;
+        }
+        commands.forEach(command => {
+            const item = document.createElement('button'); item.type = 'button'; item.className = 'command-item';
+            const main = document.createElement('span'); main.className = 'command-item-main';
+            const name = document.createElement('strong'); name.textContent = command.name + (command.enabled ? '' : '（停用）');
+            const description = document.createElement('span'); description.textContent = command.description;
+            main.append(name, description);
+            const risk = document.createElement('span'); risk.className = 'risk-badge' + (command.riskLevel === 'DANGEROUS' ? ' dangerous' : '');
+            risk.textContent = command.riskLevel === 'DANGEROUS' ? '需要确认' : '直接执行';
+            item.append(main, risk); item.addEventListener('click', () => editCommand(command.id));
+            elements.commandList.appendChild(item);
+        });
+    }
+
+    function editCommand(commandId) {
+        editingCommandId = commandId;
+        const command = commands.find(value => value.id === commandId);
+        elements.commandForm.reset(); elements.commandForm.hidden = false;
+        field('commandId').value = command?.id || '';
+        field('commandName').value = command?.name || '';
+        field('commandDescription').value = command?.description || '';
+        field('commandText').value = command?.commandText || '';
+        field('commandRisk').value = command?.riskLevel || 'NORMAL';
+        field('commandSortOrder').value = command?.sortOrder || 0;
+        field('commandEnabled').checked = command?.enabled ?? true;
+        field('commandFormError').textContent = '';
+        field('deleteCommandButton').hidden = !command;
+        field('commandName').focus();
+    }
+
+    async function saveCommand(event) {
+        event.preventDefault(); field('commandFormError').textContent = '';
+        const payload = {
+            name: field('commandName').value.trim(), description: field('commandDescription').value.trim(),
+            commandText: field('commandText').value.trim(), riskLevel: field('commandRisk').value,
+            sortOrder: Number(field('commandSortOrder').value || 0), enabled: field('commandEnabled').checked
+        };
+        try {
+            await api(editingCommandId ? `/api/server/v1/commands/${editingCommandId}`
+                : `/api/server/v1/servers/${editingServerId}/commands`, {
+                method: editingCommandId ? 'PUT' : 'POST', body: JSON.stringify(payload)
+            });
+            await loadCommands(editingServerId); elements.commandForm.hidden = true; showToast('命令配置已保存');
+        } catch (error) { field('commandFormError').textContent = error.message; }
+    }
+
+    async function deleteCommand() {
+        const command = commands.find(value => value.id === editingCommandId);
+        if (!command || !window.confirm(`确定删除命令“${command.name}”吗？`)) return;
+        try {
+            await api(`/api/server/v1/commands/${command.id}`, { method: 'DELETE' });
+            await loadCommands(editingServerId); elements.commandForm.hidden = true; showToast('命令已删除');
+        } catch (error) { field('commandFormError').textContent = error.message; }
     }
 
     function showLogin(message = '') {
@@ -108,6 +333,8 @@
         if (!text || streaming) return;
         if (!token) return showLogin();
         const conversation = currentConversation();
+        const server = servers.find(value => value.id === conversation.serverId && value.enabled);
+        if (!server) { showToast('请先为当前对话选择一台已启用的服务器'); return; }
         expireActions(conversation);
         conversation.messages.push({ role: 'user', content: text });
         if (conversation.messages.filter(message => message.role === 'user').length === 1) {
@@ -121,7 +348,7 @@
         try {
             const response = await fetch('/api/server/v1/messages', {
                 method: 'POST', headers: authHeaders(),
-                body: JSON.stringify({ conversationId: conversation.id, message: text })
+                body: JSON.stringify({ conversationId: conversation.id, serverId: conversation.serverId, message: text })
             });
             if (!response.ok) throw await responseError(response);
             await consumeSse(response, chunk => {
@@ -162,21 +389,107 @@
         onChunk(data); return false;
     }
 
-    function renderAll() { renderHistory(); renderMessages(); }
+    function renderAll() { renderHistory(); renderServerSelection(); renderMessages(); updateStreamingState(); }
+
+    function ensureConversationServer() {
+        const conversation = currentConversation();
+        const enabled = servers.filter(server => server.enabled);
+        if (!conversation.serverId && enabled.length) conversation.serverId = enabled[0].id;
+        if (conversation.serverId && !enabled.some(server => server.id === conversation.serverId) && !conversation.messages.length) {
+            conversation.serverId = enabled[0]?.id || null;
+        }
+        persistConversations();
+    }
+
+    function selectServer(serverId) {
+        if (streaming) return;
+        const server = servers.find(value => value.id === serverId && value.enabled);
+        if (!server) return;
+        closeServerMenu();
+        const conversation = currentConversation();
+        if (conversation.serverId === server.id) { closeMobileSidebar(); return; }
+        if (conversation.messages.length) {
+            const next = createConversation(server.id); conversations.unshift(next); currentConversationId = next.id;
+            conversations = conversations.slice(0, MAX_CONVERSATIONS); showToast(`已新建与“${server.name}”的对话`);
+        } else conversation.serverId = server.id;
+        persistConversations(); renderAll(); closeMobileSidebar();
+    }
+
+    function renderServerSelection() {
+        const conversation = currentConversation();
+        const server = servers.find(value => value.id === conversation.serverId);
+        elements.serverSelectLabel.textContent = server?.enabled ? server.name : '请选择服务器';
+        elements.serverSelectButton.classList.toggle('has-value', Boolean(server?.enabled));
+        elements.currentServerMeta.textContent = server
+            ? `${server.name} · ${server.username}@${server.host}:${server.port}` : '请选择本次对话使用的服务器';
+        elements.serverSelectMenu.querySelectorAll('.server-select-option').forEach(option => {
+            const selected = option.dataset.serverId === server?.id;
+            option.classList.toggle('selected', selected);
+            option.setAttribute('aria-selected', String(selected));
+        });
+        elements.serverList.querySelectorAll('.server-item').forEach((item, index) => {
+            item.classList.toggle('selected', servers[index]?.id === server?.id);
+        });
+    }
+
+    function renderServerMenu() {
+        elements.serverSelectMenu.replaceChildren();
+        const enabledServers = servers.filter(server => server.enabled);
+        if (!enabledServers.length) {
+            const empty = document.createElement('p'); empty.className = 'server-select-empty';
+            empty.textContent = '还没有可用服务器'; elements.serverSelectMenu.appendChild(empty); return;
+        }
+        enabledServers.forEach(server => {
+            const option = document.createElement('button'); option.type = 'button';
+            option.className = 'server-select-option'; option.dataset.serverId = server.id;
+            option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
+            const icon = document.createElement('span'); icon.className = 'server-option-icon'; icon.textContent = 'S';
+            const text = document.createElement('span'); text.className = 'server-option-text';
+            const name = document.createElement('strong'); name.textContent = server.name;
+            const address = document.createElement('small'); address.textContent = `${server.username}@${server.host}:${server.port}`;
+            const check = document.createElement('span'); check.className = 'server-option-check'; check.textContent = '✓';
+            text.append(name, address); option.append(icon, text, check);
+            option.addEventListener('click', () => selectServer(server.id));
+            elements.serverSelectMenu.appendChild(option);
+        });
+    }
+
+    function toggleServerMenu() {
+        if (elements.serverSelectButton.disabled) return;
+        const willOpen = elements.serverSelectMenu.hidden;
+        elements.serverSelectMenu.hidden = !willOpen;
+        elements.serverSelectButton.setAttribute('aria-expanded', String(willOpen));
+    }
+
+    function closeServerMenu() {
+        elements.serverSelectMenu.hidden = true;
+        elements.serverSelectButton.setAttribute('aria-expanded', 'false');
+    }
 
     function renderHistory() {
         elements.historyList.replaceChildren();
         [...conversations].sort((a, b) => b.updatedAt - a.updatedAt).forEach(conversation => {
             const row = document.createElement('div');
-            row.className = 'history-item' + (conversation.id === currentConversationId ? ' active' : ''); row.tabIndex = 0;
+            row.className = 'history-item' + (conversation.id === currentConversationId ? ' active' : '')
+                + (managingConversations ? ' selecting' : '')
+                + (selectedConversationIds.has(conversation.id) ? ' selected' : ''); row.tabIndex = 0;
+            if (managingConversations) {
+                const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'history-checkbox';
+                checkbox.checked = selectedConversationIds.has(conversation.id);
+                checkbox.setAttribute('aria-label', `选择会话：${conversation.title}`);
+                checkbox.addEventListener('click', event => event.stopPropagation());
+                checkbox.addEventListener('change', () => toggleConversationSelection(conversation.id));
+                row.appendChild(checkbox);
+            }
             const title = document.createElement('span'); title.className = 'history-title'; title.textContent = conversation.title;
-            const remove = document.createElement('button'); remove.className = 'history-delete'; remove.type = 'button';
-            remove.title = '删除本地会话'; remove.textContent = '×';
-            remove.addEventListener('click', event => { event.stopPropagation(); deleteConversation(conversation.id); });
-            const select = () => { if (!streaming) { currentConversationId = conversation.id; renderAll(); closeMobileSidebar(); } };
-            row.addEventListener('click', select); row.addEventListener('keydown', event => { if (event.key === 'Enter') select(); });
-            row.append(title, remove); elements.historyList.appendChild(row);
+            const activate = () => {
+                if (managingConversations) return toggleConversationSelection(conversation.id);
+                if (!streaming) { currentConversationId = conversation.id; renderAll(); closeMobileSidebar(); }
+            };
+            row.addEventListener('click', activate); row.addEventListener('keydown', event => { if (event.key === 'Enter') activate(); });
+            row.appendChild(title); elements.historyList.appendChild(row);
         });
+        syncConversationSelectionControls();
     }
 
     function renderMessages() {
@@ -215,7 +528,7 @@
         const heading = document.createElement('div'); heading.className = 'operation-heading';
         const icon = document.createElement('span'); icon.className = 'operation-icon'; icon.textContent = '⚙';
         const text = document.createElement('div');
-        const title = document.createElement('h3'); title.textContent = operationLabel(action.operation, action.target);
+        const title = document.createElement('h3'); title.textContent = `执行命令：${action.commandName || '未命名命令'}`;
         const meta = document.createElement('p'); meta.textContent = `${action.serverName} · ${action.serverId}`;
         text.append(title, meta); heading.append(icon, text); card.appendChild(heading);
         const reason = document.createElement('p'); reason.className = 'operation-reason'; reason.textContent = action.reason; card.appendChild(reason);
@@ -253,10 +566,6 @@
         } catch (error) { handleApiError(error); }
     }
 
-    function operationLabel(operation, target) {
-        return operation === 'RESTART_CONTAINER' ? `重启容器 ${target}` : `重启服务 ${target}`;
-    }
-
     function actionStatus(status) {
         return ({ PENDING_APPROVAL: '等待你的确认', PROCESSING: '正在执行…', EXECUTED: '执行成功', FAILED: '执行失败',
             CANCELLED: '已取消', SUPERSEDED: '已失效' })[status] || status;
@@ -284,19 +593,68 @@
     }
 
     function newConversation() {
-        if (streaming) return; const conversation = createConversation(); conversations.unshift(conversation);
+        if (streaming) return; const conversation = createConversation(currentConversation()?.serverId || servers.find(server => server.enabled)?.id || null); conversations.unshift(conversation);
         conversations = conversations.slice(0, MAX_CONVERSATIONS); currentConversationId = conversation.id;
         persistConversations(); renderAll(); closeMobileSidebar(); elements.input.focus();
     }
 
-    function deleteConversation(id) {
-        if (streaming || conversations.length === 1) return;
-        conversations = conversations.filter(conversation => conversation.id !== id);
-        if (currentConversationId === id) currentConversationId = conversations[0].id;
-        persistConversations(); renderAll();
+    function setConversationManagement(active) {
+        if (streaming) { showToast('回答生成期间不能管理会话'); return; }
+        managingConversations = active;
+        selectedConversationIds.clear();
+        document.querySelector('#manageConversationsButton').hidden = active;
+        elements.conversationBulkActions.hidden = !active;
+        renderHistory();
     }
 
-    function createConversation() { return { id: crypto.randomUUID(), title: '新对话', messages: [], updatedAt: Date.now() }; }
+    function toggleConversationSelection(id) {
+        if (selectedConversationIds.has(id)) selectedConversationIds.delete(id);
+        else selectedConversationIds.add(id);
+        renderHistory();
+    }
+
+    function toggleAllConversations() {
+        selectedConversationIds.clear();
+        if (elements.selectAllConversations.checked) conversations.forEach(conversation => selectedConversationIds.add(conversation.id));
+        renderHistory();
+    }
+
+    function syncConversationSelectionControls() {
+        const selectedCount = selectedConversationIds.size;
+        elements.selectedConversationCount.textContent = `已选 ${selectedCount} 项`;
+        elements.deleteSelectedConversations.disabled = selectedCount === 0;
+        elements.selectAllConversations.checked = conversations.length > 0 && selectedCount === conversations.length;
+        elements.selectAllConversations.indeterminate = selectedCount > 0 && selectedCount < conversations.length;
+    }
+
+    async function deleteSelectedConversations() {
+        if (streaming || !selectedConversationIds.size) return;
+        const count = selectedConversationIds.size;
+        if (!window.confirm(`确定删除选中的 ${count} 个本地对话吗？此操作无法撤销。`)) return;
+        const removed = conversations.filter(conversation => selectedConversationIds.has(conversation.id));
+        const cleanupResults = await Promise.all(removed.map(async conversation => {
+            try {
+                await api(`/api/server/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: 'DELETE' });
+                return { id: conversation.id, success: true };
+            } catch (error) { return { id: conversation.id, success: false, error }; }
+        }));
+        const deletedIds = new Set(cleanupResults.filter(result => result.success).map(result => result.id));
+        if (!deletedIds.size) {
+            handleApiError(cleanupResults.find(result => result.error)?.error || new Error('服务端对话清理失败'));
+            return;
+        }
+        const replacementServerId = currentConversation()?.serverId || servers.find(server => server.enabled)?.id || null;
+        conversations = conversations.filter(conversation => !deletedIds.has(conversation.id));
+        if (!conversations.length) conversations.push(createConversation(replacementServerId));
+        if (!conversations.some(conversation => conversation.id === currentConversationId)) currentConversationId = conversations[0].id;
+        persistConversations(); setConversationManagement(false); renderAll();
+        const failedCount = count - deletedIds.size;
+        showToast(failedCount
+            ? `已同步删除 ${deletedIds.size} 个对话，${failedCount} 个清理失败，请重试`
+            : `已同步删除 ${deletedIds.size} 个对话`);
+    }
+
+    function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, title: '新对话', messages: [], updatedAt: Date.now() }; }
     function currentConversation() { return conversations.find(value => value.id === currentConversationId) || conversations[0]; }
     function expireActions(conversation) { conversation.messages.forEach(message => { if (message.action?.status === 'PENDING_APPROVAL') message.action.status = 'SUPERSEDED'; }); }
     function loadConversations() { try { const value = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY)); return Array.isArray(value) ? value.slice(0, MAX_CONVERSATIONS) : []; } catch (_) { return []; } }
@@ -314,11 +672,25 @@
         const error = new Error(message); error.status = response.status; return error;
     }
     function handleApiError(error) { if (error.status === 401) logout(); showToast(error.message, 6000); }
-    function updateStreamingState() { elements.input.disabled = streaming; elements.send.disabled = streaming; }
+    function updateStreamingState() {
+        const ready = Boolean(servers.find(server => server.id === currentConversation()?.serverId && server.enabled));
+        elements.input.disabled = streaming || !ready; elements.send.disabled = streaming || !ready;
+        elements.input.placeholder = ready ? '向服务器助手提问' : '请先选择或配置服务器';
+        elements.serverSelectButton.disabled = streaming;
+        if (streaming) closeServerMenu();
+    }
     function resizeComposer() { elements.input.style.height = 'auto'; elements.input.style.height = `${Math.min(elements.input.scrollHeight, 200)}px`; }
     function syncViewportHeight() { const height = window.visualViewport?.height || window.innerHeight; document.documentElement.style.setProperty('--app-height', `${Math.round(height)}px`); }
     function openMobileSidebar() { elements.sidebar.classList.add('active'); elements.sidebarOverlay.classList.add('active'); }
     function closeMobileSidebar() { elements.sidebar.classList.remove('active'); elements.sidebarOverlay.classList.remove('active'); }
+    function toggleSidebar() {
+        const collapsed = elements.sidebar.classList.toggle('collapsed');
+        const button = document.querySelector('#toggleSidebar');
+        button.classList.toggle('is-collapsed', collapsed);
+        button.setAttribute('aria-label', collapsed ? '展开侧边栏' : '折叠侧边栏');
+    }
     function escapeHtml(value) { return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
+    function authLabel(value) { return value === 'PRIVATE_KEY' ? '私钥' : '密码'; }
+    function field(id) { return document.querySelector(`#${id}`); }
     function showToast(message, duration = 3500) { clearTimeout(toastTimer); elements.toast.textContent = message; elements.toast.hidden = false; toastTimer = setTimeout(() => { elements.toast.hidden = true; }, duration); }
 })();

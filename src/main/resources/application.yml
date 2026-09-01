@@ -10,6 +10,13 @@ server:
 spring:
   application:
     name: ai-platform
+  datasource:
+    url: jdbc:h2:file:./data/ai-platform;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    username: sa
+    password:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
   ai:
     model:
       chat: ${AI_CHAT_PROVIDER:ollama}
@@ -23,7 +30,7 @@ spring:
       api-key: ${DEEPSEEK_API_KEY:}
       chat:
         options:
-          model: ${DEEPSEEK_CHAT_MODEL:deepseek-chat}
+          model: ${DEEPSEEK_CHAT_MODEL:deepseek-v4-flash}
           temperature: 0.2
 
 ai-platform:
@@ -42,9 +49,9 @@ ai-platform:
     sse-timeout: ${BLOG_ASSISTANT_SSE_TIMEOUT:120s}
     approval-ttl: ${BLOG_PUBLICATION_APPROVAL_TTL:15m}
   server:
-    # 服务器清单是 JSON 数组；凭据只引用环境变量名或挂载的私钥文件，不传给浏览器和模型。
-    access-token: ${SERVER_ASSISTANT_ACCESS_TOKEN:}
-    servers-json: ${SERVER_ASSISTANT_SERVERS_JSON:[]}
+    # 页面保存的 SSH 凭据使用主密钥加密；生产环境必须配置 32 字节 Base64 密钥。
+    access-token: ${SERVER_ASSISTANT_ACCESS_TOKEN:123456}
+    credential-master-key: ${SERVER_CREDENTIAL_MASTER_KEY:j2A5U/kFRXFQU690r0wjGSGXprsJhVJiilBQ6Px1+os=}
     connect-timeout: ${SERVER_SSH_CONNECT_TIMEOUT:8s}
     command-timeout: ${SERVER_SSH_COMMAND_TIMEOUT:30s}
     sse-timeout: ${SERVER_ASSISTANT_SSE_TIMEOUT:120s}
