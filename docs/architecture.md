@@ -10,11 +10,17 @@ home-page
        └─ 调用 ai-platform 公开 SSE 接口
 
 ai-platform
-  ├─ platform：模型与共享契约
+  ├─ platform：模型与共享契约（内部实现放 platform.internal）
   ├─ website：网站知识、接口、CORS、限流
   ├─ blog：博客查询、访问控制、对话内发布确认
   └─ server：服务器/命令配置、凭据加密、SSH 执行与危险命令确认
 ```
+
+三个助手模块的包内统一按职责分子包：`controller`（REST/页面控制器）、`service`（业务服务）、
+`model`（DTO 与实体记录）、`config`（Properties、拦截器、异常处理）；`server` 额外有
+`repository`（JDBC 访问）、`security`（凭据加解密）、`tool`（模型工具），`blog`/`server` 的
+模型工具统一放在 `tool` 子包。子包不声明 `@ApplicationModule`，属于父模块一部分，模块边界仍由
+各模块根的 `package-info.java` 定义。
 
 ## 网站助手请求链
 

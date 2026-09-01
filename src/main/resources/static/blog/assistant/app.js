@@ -1,6 +1,11 @@
 (() => {
     'use strict';
 
+    // 博客助手后台页面：整页应用，无框架。
+    // 访问口令（token）只放内存 + sessionStorage——关掉标签页即失效，避免长期留存在浏览器里；
+    // 聊天记录与待确认发布选项的状态存 localStorage，刷新后能恢复。
+    // 与后端的消息协议：POST /api/blog/v1/messages 返回 SSE 流（文本 chunk + [DONE]），
+    // 流结束前可能带一个 event: action 事件（发布候选 JSON），前端据此在回复下方渲染确认卡片。
     const TOKEN_KEY = 'ai-platform.blog-access-token';
     const CONVERSATIONS_KEY = 'ai-platform.blog-conversations.v2';
     const MAX_CONVERSATIONS = 20;
@@ -53,6 +58,7 @@
         elements.loginForm.addEventListener('submit', verifyLogin);
     }
 
+    // 启动时先验证已保存的口令是否仍然有效；服务端没配口令时 verify 返回 503，也走重新登录。
     async function initializeAuth() {
         if (!token) return showLogin();
         try {
@@ -64,6 +70,7 @@
         }
     }
 
+    // 口令只在本次验证成功后写入 sessionStorage——验证失败绝不保存，防止把无效口令留在浏览器里。
     async function verifyLogin(event) {
         event.preventDefault();
         const candidate = elements.accessToken.value.trim();
@@ -104,8 +111,11 @@
         if (!text || streaming) return;
         if (!token) return showLogin();
         const conversation = currentConversation();
+        // 发送前把当前会话尚未确认的发布选项标记为失效：服务端在同一对话生成新候选时也会作废旧的，
+        // 前端同步这个状态避免出现「点击一个已经失效的按钮」的假象。
         expirePendingActions(conversation);
         conversation.messages.push({ role: 'user', content: text });
+        // 第一条用户消息作为会话标题（截断到 24 字），后续不再改，避免历史列表越变越乱。
         if (conversation.messages.filter(message => message.role === 'user').length === 1) {
             conversation.title = text.length > 24 ? text.slice(0, 24) + '…' : text;
         }
@@ -145,6 +155,8 @@
         }
     }
 
+    // 手写 SSE 消费（理由同网站组件）：接口是 POST + Bearer 认证，EventSource 的 GET 语义无法携带。
+    // 网络分片可能切在事件中间，所以保留 buffer 等下一个分片补全。
     async function consumeSse(response, onChunk, onAction) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -161,6 +173,8 @@
         if (buffer && !completed) consumeSseEvent(buffer, onChunk, onAction);
     }
 
+    // 博客接口的 SSE 有两种事件：默认 message（纯文本 chunk）和 action（发布候选 JSON）。
+    // [DONE] 是流结束标记，遇到即停止消费。action 的 JSON 解析失败只提示，不中断整条回复。
     function consumeSseEvent(event, onChunk, onAction) {
         const lines = event.split(/\r?\n/);
         const eventName = lines.find(line => line.startsWith('event:'))?.slice(6).trim() || 'message';
@@ -261,6 +275,8 @@
         return actions;
     }
 
+    // 发布候选卡片：状态机 PENDING_APPROVAL → PROCESSING → PUBLISHED / CANCELLED / SUPERSEDED / UNCERTAIN。
+    // 只在待确认状态渲染操作按钮；其他状态只展示最终结果文本，避免对已处理的动作二次点击。
     function renderPublicationAction(message) {
         const action = message.action;
         const card = document.createElement('section');
@@ -308,6 +324,9 @@
         return button;
     }
 
+    // 发布动作的两种终态语义（来自服务端约定）：
+    // PUBLISHED = 博客系统已接受；UNCERTAIN = 网络异常无法判断是否已写入，需要用户去后台核对，
+    // 前端不做自动重试，避免同一篇文章被发布两次。
     async function approvePublication(message) {
         if (message.action?.status !== 'PENDING_APPROVAL') return;
         message.action.status = 'PROCESSING';
@@ -328,6 +347,7 @@
     async function cancelPublication(message) {
         if (message.action?.status !== 'PENDING_APPROVAL') return;
         try {
+            // 通知服务端作废对应的一次性发布选项（只能被消费一次，取消后按钮即失效）。
             await api(`/api/blog/v1/publications/${encodeURIComponent(message.action.actionId)}`, { method: 'DELETE' });
             message.action.status = 'CANCELLED';
             persistConversations();
@@ -349,12 +369,15 @@
             CANCELLED: '已取消', SUPERSEDED: '已失效', UNCERTAIN: '结果不确定，请到博客后台核对' })[status] || status;
     }
 
-    function renderMarkdown(source) {
-        if (!window.marked || !window.DOMPurify) return escapeHtml(source).replace(/\n/g, '<br>');
-        return window.DOMPurify.sanitize(window.marked.parse(source), { USE_PROFILES: { html: true } });
-    }
+    // 模型渲染可能含任意 HTML，必须先过 DOMPurify 再进 innerHTML；
+        // marked 不可用（CDN 失败）时退化为纯文本转义，宁可没有排版也不能放行原始 HTML。
+        function renderMarkdown(source) {
+            if (!window.marked || !window.DOMPurify) return escapeHtml(source).replace(/\n/g, '<br>');
+            return window.DOMPurify.sanitize(window.marked.parse(source), { USE_PROFILES: { html: true } });
+        }
 
-    function decorateCodeBlocks(root) {
+        // 外部链接强制新窗口打开并加 noopener；代码块补一个复制按钮（复制内容不经过 innerHTML）。
+        function decorateCodeBlocks(root) {
         root.querySelectorAll('a').forEach(link => {
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
@@ -382,17 +405,19 @@
         }
     }
 
-    function newConversation() {
-        if (streaming) return;
-        const conversation = createConversation();
-        conversations.unshift(conversation);
-        conversations = conversations.slice(0, MAX_CONVERSATIONS);
-        currentConversationId = conversation.id;
-        persistConversations();
-        renderAll();
-        closeMobileSidebar();
-        elements.input.focus();
-    }
+    // 历史会话只存本地（服务端不持久化聊天记录），上限 20 个；
+        // 至少保留一个会话，防止「删掉全部会话后界面没有落点」。
+        function newConversation() {
+            if (streaming) return;
+            const conversation = createConversation();
+            conversations.unshift(conversation);
+            conversations = conversations.slice(0, MAX_CONVERSATIONS);
+            currentConversationId = conversation.id;
+            persistConversations();
+            renderAll();
+            closeMobileSidebar();
+            elements.input.focus();
+        }
 
     function deleteConversation(id) {
         if (streaming || conversations.length === 1) return;
@@ -410,7 +435,9 @@
         return conversations.find(conversation => conversation.id === currentConversationId) || conversations[0];
     }
 
-    function expirePendingActions(conversation) {
+    // 恢复会话时把上次遗留的待确认选项直接置为「已失效」：
+        // 服务端的一次性选项有有效期且可能已被作废，本地不能保留一个点了没反应的按钮。
+        function expirePendingActions(conversation) {
         conversation.messages.forEach(message => {
             if (message.action?.status === 'PENDING_APPROVAL') message.action.status = 'SUPERSEDED';
         });
@@ -427,6 +454,7 @@
         localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations.slice(0, MAX_CONVERSATIONS)));
     }
 
+    // 统一请求出口：所有非 2xx 都转成带 status 的 Error，由调用方决定是提示还是登出。
     async function api(url, options = {}) {
         const response = await fetch(url, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
         if (!response.ok) throw await responseError(response);

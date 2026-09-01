@@ -1,6 +1,13 @@
 (() => {
     'use strict';
 
+    // 服务器助手整页应用。对话与服务器强绑定（服务端同一对话只绑一台服务器），
+    // 所以本地会话记录里每个 conversation 都带 serverId；切换服务器 = 新建对话。
+    // 消息协议分两段：
+    //   1) POST /api/server/v1/messages               —— 普通提问，SSE 返回文本 + 可能的 action 事件
+    //   2) POST /api/server/v1/messages/continue      —— 用户确认「执行命令/添加命令」后，凭服务端签发的一次性
+    //      continuationId 恢复同一模型会话，让模型基于真实执行结果继续原任务
+    // action 事件载荷是 pendingOperation / pendingCommandProposal 之一，前端据此渲染确认卡片。
     const TOKEN_KEY = 'ai-platform.server-access-token';
     const CONVERSATIONS_KEY = 'ai-platform.server-conversations.v1';
     const MAX_CONVERSATIONS = 20;
@@ -138,6 +145,7 @@
         renderAll();
     }
 
+    // 打开设置时默认选中「当前对话的服务器」；没有服务器时进入新增表单。
     async function openSettings() {
         elements.settingsOverlay.hidden = false;
         renderSettingsServerList();
@@ -165,7 +173,9 @@
         });
     }
 
-    async function editServer(serverId) {
+    // 编辑服务器表单：凭据输入框永远留空显示——服务端保存的是 AES-GCM 密文，
+        // 接口只回「是否已配置」，不回明文；留空提交 = 沿用已有密文（见服务端 updateServer）。
+        async function editServer(serverId) {
         editingServerId = serverId;
         editingCommandId = null;
         const server = servers.find(value => value.id === serverId);
@@ -335,6 +345,8 @@
         const conversation = currentConversation();
         const server = servers.find(value => value.id === conversation.serverId && value.enabled);
         if (!server) { showToast('请先为当前对话选择一台已启用的服务器'); return; }
+        // 把待确认的操作/提议置为「已失效」：服务端在生成新动作时会作废同一对话的旧动作，
+        // 前端同步状态，避免用户点击一个服务端已不认的按钮。
         expireActions(conversation);
         conversation.messages.push({ role: 'user', content: text });
         if (conversation.messages.filter(message => message.role === 'user').length === 1) {
@@ -366,7 +378,9 @@
         }
     }
 
-    async function consumeSse(response, onChunk, onAction) {
+    // 手写 SSE 消费（与博客页面相同的协议）：POST + Bearer 不能走 EventSource；
+        // 按空行切事件、缓冲未完成分片，action 事件在流末尾携带待确认操作/提议。
+        async function consumeSse(response, onChunk, onAction) {
         const reader = response.body.getReader(); const decoder = new TextDecoder();
         let buffer = ''; let completed = false;
         while (!completed) {
@@ -391,7 +405,9 @@
 
     function renderAll() { renderHistory(); renderServerSelection(); renderMessages(); updateStreamingState(); }
 
-    function ensureConversationServer() {
+    // 会话没有绑定服务器时自动选第一台启用的；绑定的服务器被停用且会话还没有任何消息时，
+        // 允许改绑其他服务器（有过对话的会话则保持原绑定，因为模型记忆里已经认定了那台服务器）。
+        function ensureConversationServer() {
         const conversation = currentConversation();
         const enabled = servers.filter(server => server.enabled);
         if (!conversation.serverId && enabled.length) conversation.serverId = enabled[0].id;
@@ -401,7 +417,9 @@
         persistConversations();
     }
 
-    function selectServer(serverId) {
+    // 服务端把「会话 ↔ 服务器」绑定在内存里，一个对话中途不能换服务器；
+        // 所以有历史消息时切换目标 = 为那台服务器新建一个对话，而不是改绑当前对话。
+        function selectServer(serverId) {
         if (streaming) return;
         const server = servers.find(value => value.id === serverId && value.enabled);
         if (!server) return;
@@ -522,6 +540,9 @@
         copy.addEventListener('click', () => copyText(message.content, copy)); actions.appendChild(copy); return actions;
     }
 
+    // 动作卡片：actionType=ADD_COMMAND 渲染「添加命令」提议，否则渲染「执行命令」确认。
+    // 状态机 PENDING_* → PROCESSING → ADDED/EXECUTED/FAILED/CANCELLED/SUPERSEDED，
+    // 只在待确认状态渲染操作按钮；危险命令的提议会提示「添加后执行仍需再次确认」。
     function renderAction(message) {
         const action = message.action; const card = document.createElement('section');
         card.className = `operation-action ${String(action.status || '').toLowerCase()}`;
@@ -564,6 +585,10 @@
         button.textContent = label; button.addEventListener('click', handler); return button;
     }
 
+    // 确认执行危险命令。确认后服务端会返回两种情况：
+    //   result.success=true  -> 已执行，附执行结果 + continuationId（恢复会话继续原任务）
+    //   result.success=false -> 执行结果不确定（可能网络中断），提示用户先核对服务器状态
+    // 服务端对同一 actionId 只允许消费一次，双击只会有一个请求生效。
     async function approveOperation(message) {
         if (message.action?.status !== 'PENDING_APPROVAL') return;
         let resolved = false;
@@ -576,12 +601,15 @@
             message.action.execution = result.execution; showToast(result.message, 6000);
             await continueAfterAction(message, result.continuationId);
         } catch (error) {
+            // resolved=false 说明请求没到服务端（网络/401），动作还处于待确认，恢复按钮让用户重试；
+            // 已 resolved 则服务端已消费 actionId，不能再恢复待确认状态。
             if (!resolved) message.action.status = 'PENDING_APPROVAL';
             handleApiError(error);
         }
         finally { streaming = false; persistConversations(); updateStreamingState(); renderAll(); }
     }
 
+    // 取消只作废服务端的一次性动作，不调用模型——用一个明确的收尾消息结束本轮。
     async function cancelOperation(message) {
         if (message.action?.status !== 'PENDING_APPROVAL') return;
         streaming = true; message.action.status = 'PROCESSING'; updateStreamingState(); renderMessages();
@@ -596,6 +624,8 @@
         }
     }
 
+    // 确认把模型提议的命令写入服务器配置。结果里的 command.id 是服务端生成的正式 ID，
+    // 后续模型只能按这个 ID 执行。若设置面板正开着该服务器的命令列表，顺带刷新。
     async function approveCommandProposal(message) {
         if (message.action?.status !== 'PENDING_COMMAND_APPROVAL') return;
         let resolved = false;
@@ -632,6 +662,8 @@
         }
     }
 
+    // 用服务端签发的一次性 continuationId 恢复同一模型会话（凭证绑定会话+服务器，只能消费一次）。
+    // 这样模型能「看到」刚才确认动作的结果并继续原任务，而不需要用户重新描述上下文。
     async function continueAfterAction(actionMessage, continuationId) {
         const conversation = currentConversation();
         if (!conversation.messages.includes(actionMessage) || !continuationId) {
@@ -741,7 +773,9 @@
         elements.selectAllConversations.indeterminate = selectedCount > 0 && selectedCount < conversations.length;
     }
 
-    async function deleteSelectedConversations() {
+    // 批量删除本地会话时，必须同步清理服务端状态（模型记忆、会话-服务器绑定、待确认操作/提议），
+        // 否则服务端会残留孤儿状态。逐个调 DELETE /conversations/{id}，部分失败时保留本地记录并提示重试。
+        async function deleteSelectedConversations() {
         if (streaming || !selectedConversationIds.size) return;
         const count = selectedConversationIds.size;
         if (!window.confirm(`确定删除选中的 ${count} 个本地对话吗？此操作无法撤销。`)) return;
@@ -770,7 +804,9 @@
 
     function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, title: '新对话', messages: [], updatedAt: Date.now() }; }
     function currentConversation() { return conversations.find(value => value.id === currentConversationId) || conversations[0]; }
-    function expireActions(conversation) { conversation.messages.forEach(message => {
+    // 新消息发出后，把该会话待确认的动作全部置为已失效——
+        // 服务端生成新动作时也会作废旧动作，前端保持一致，避免点击「执行」一个已不存在的选项。
+        function expireActions(conversation) { conversation.messages.forEach(message => {
         if (['PENDING_APPROVAL', 'PENDING_COMMAND_APPROVAL'].includes(message.action?.status)) message.action.status = 'SUPERSEDED';
     }); }
     function loadConversations() { try { const value = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY)); return Array.isArray(value) ? value.slice(0, MAX_CONVERSATIONS) : []; } catch (_) { return []; } }

@@ -1,9 +1,11 @@
 (() => {
     'use strict';
 
+    // 组件可能被多个脚本入口重复注入（如首页同时挂了新旧版本），用全局标记保证只初始化一次。
     if (window.__THX_WEBSITE_ASSISTANT_LOADED__) return;
     window.__THX_WEBSITE_ASSISTANT_LOADED__ = true;
 
+    // 脚本地址同时是默认 API 来源和样式表来源；跨域部署时由首页通过 data-api-base 显式指定。
     const loaderScript = document.currentScript;
     if (!loaderScript || !loaderScript.src) {
         console.error('网站助手加载失败：无法确定组件脚本地址');
@@ -18,6 +20,8 @@
     const stylesheetUrl = new URL('widget.css', scriptUrl).href;
     const assistantTitle = loaderScript.dataset.title?.trim() || '网站智能助手';
 
+    // 网站助手前端组件：聊天记录和会话编号保存在 localStorage，刷新页面可继续同一会话；
+    // 模型记忆也按 conversationId 挂在服务端，因此「新建会话」必须同时换编号并清空本地记录。
     class WebsiteAssistantElement extends HTMLElement {
         constructor() {
             super();
@@ -34,6 +38,7 @@
             this.bindEvents();
             this.renderMessages();
             this.syncTheme();
+            // 首页可能在运行中切换主题（data-theme/class），跟随宿主页面而不是固定一种外观。
             this.themeObserver = new MutationObserver(() => this.syncTheme());
             this.themeObserver.observe(document.documentElement, {
                 attributes: true,
@@ -43,9 +48,12 @@
 
         disconnectedCallback() {
             this.themeObserver?.disconnect();
+            // 组件被移除时中断进行中的 SSE 读取，避免 reader 悬挂占用连接。
             this.reader?.cancel().catch(() => {});
         }
 
+        // 整个界面用原生模板字符串构建并放入 shadow DOM，与首页样式完全隔离；
+        // 交互元素不依赖任何外部框架，方便嵌入任意站点。
         renderShell() {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
@@ -122,6 +130,8 @@
             this.launcher.focus();
         }
 
+        // 新会话 = 换一个新的 conversationId。服务端对每个编号保留独立模型记忆，
+        // 本地旧的 30 条消息也必须清掉，否则会与「新会话」的语义矛盾。
         startNewConversation() {
             this.reader?.cancel().catch(() => {});
             this.reader = null;
@@ -140,6 +150,7 @@
 
             this.input.value = '';
             this.messages.push({role: 'user', content: message});
+            // 先渲染一个空的助手消息占位，SSE 文本片段到达后逐段追加，形成流式打字效果。
             const assistantMessage = {role: 'assistant', content: ''};
             this.messages.push(assistantMessage);
             this.pending = true;
@@ -151,6 +162,7 @@
                     assistantMessage.content += chunk;
                     this.updateLastAssistantMessage(assistantMessage.content);
                 });
+                // 服务端正常结束但没有输出任何文本（如空回答兜底）时，补一句友好提示。
                 if (!assistantMessage.content) {
                     assistantMessage.content = '抱歉，我暂时没有得到回答，请稍后再试。';
                 }
@@ -167,6 +179,8 @@
             }
         }
 
+        // 用 fetch + ReadableStream 手写 SSE 解析，而不是 EventSource：
+        // EventSource 只支持 GET，而本站接口是 POST（避免消息进入服务器访问日志/代理缓存）。
         async streamAnswer(message, onChunk) {
             const response = await fetch(`${apiBase}/api/public/v1/website/messages`, {
                 method: 'POST',
@@ -185,6 +199,8 @@
             let buffer = '';
             let completed = false;
 
+            // SSE 事件以空行分隔，但网络分片不会恰好切在事件边界，
+            // 因此保留未消费的 buffer，等下一个分片到达再补全。
             while (!completed) {
                 const {done, value} = await this.reader.read();
                 buffer += decoder.decode(value || new Uint8Array(), {stream: !done});
@@ -196,9 +212,12 @@
                 if (done) break;
             }
 
+            // 流已结束但最后一个事件没有空行结尾，补处理一次。
             if (buffer && !completed) this.consumeSseEvent(buffer, onChunk);
         }
 
+        // 只取 data: 行并按行还原（服务端只有 data 事件，没有 event/type 字段）。
+        // [DONE] 是服务端约定的流结束标记，遇到即停止，不再把结束标记当作文本渲染。
         consumeSseEvent(event, onChunk) {
             const data = event.split(/\r?\n/)
                 .filter(line => line.startsWith('data:'))
@@ -252,6 +271,7 @@
             });
         }
 
+        // 主题跟随宿主页面：优先 data-theme 显式声明，缺省时按系统 prefers-color-scheme 判断。
         syncTheme() {
             const declaredTheme = document.documentElement.getAttribute('data-theme');
             const dark = declaredTheme === 'dark'
@@ -259,6 +279,7 @@
             this.dataset.theme = dark ? 'dark' : 'light';
         }
 
+        // 会话编号缺省时生成一个新的并持久化；隐私模式等场景 localStorage 不可用也不影响本次会话。
         readConversationId() {
             try {
                 return localStorage.getItem('thx_website_assistant_conversation_id') || this.createConversationId();
@@ -272,6 +293,7 @@
             return `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
         }
 
+        // 只信任结构完整的消息记录，并限制最多 30 条，防止坏数据/超大记录拖垮页面。
         readMessages() {
             try {
                 const saved = JSON.parse(localStorage.getItem('thx_website_assistant_messages') || '[]');

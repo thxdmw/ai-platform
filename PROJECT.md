@@ -31,6 +31,22 @@
 | `static/preview` | 组件本地视觉验证页面 |
 | `docs` | 架构和接入说明 |
 
+## 包内结构
+
+三个助手模块（`website`、`blog`、`server`）的包内统一按职责分子包，方便定位代码：
+
+| 子包 | 内容 |
+|---|---|
+| `controller` | REST 与页面控制器，只做参数校验和响应装配，不含业务逻辑 |
+| `service` | 业务服务（对话编排、审批流、配置管理、外部客户端、SSH 执行） |
+| `model` | 请求/响应 DTO、内部实体记录和枚举 |
+| `config` | 配置属性（Properties）、Web 配置、拦截器和异常处理器 |
+| `repository`（仅 server） | JDBC 数据访问 |
+| `security`（仅 server） | 凭据加解密 |
+| `tool`（blog/server） | 暴露给模型的 Spring AI 工具 |
+
+`platform` 保持扁平（只含共享契约），内部实现强制放 `platform.internal`。查找代码时先按模块、再按上述职责定位，`package-info.java` 中的 `@ApplicationModule` 声明了模块边界，子包不重复声明。
+
 ## 不可破坏的边界
 
 1. 浏览器代码中不得保存模型密钥、HMAC 密钥或后台凭据。
