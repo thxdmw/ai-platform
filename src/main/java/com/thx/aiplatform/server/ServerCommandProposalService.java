@@ -16,22 +16,26 @@ class ServerCommandProposalService {
     private final ServerConfigurationService configurationService;
     private final ServerCommandRiskClassifier riskClassifier;
     private final ServerAssistantProperties properties;
+    private final ServerActionContinuationService continuationService;
     private final Clock clock;
     private final Map<String, PendingProposal> proposals = new ConcurrentHashMap<>();
 
     @Autowired
     ServerCommandProposalService(ServerConfigurationService configurationService,
                                  ServerCommandRiskClassifier riskClassifier,
-                                 ServerAssistantProperties properties) {
-        this(configurationService, riskClassifier, properties, Clock.systemUTC());
+                                 ServerAssistantProperties properties,
+                                 ServerActionContinuationService continuationService) {
+        this(configurationService, riskClassifier, properties, continuationService, Clock.systemUTC());
     }
 
     ServerCommandProposalService(ServerConfigurationService configurationService,
                                  ServerCommandRiskClassifier riskClassifier,
-                                 ServerAssistantProperties properties, Clock clock) {
+                                 ServerAssistantProperties properties,
+                                 ServerActionContinuationService continuationService, Clock clock) {
         this.configurationService = configurationService;
         this.riskClassifier = riskClassifier;
         this.properties = properties;
+        this.continuationService = continuationService;
         this.clock = clock;
     }
 
@@ -68,8 +72,12 @@ class ServerCommandProposalService {
         proposals.remove(actionId);
         String riskMessage = proposal.risk() == ServerCommandRisk.DANGEROUS
                 ? "该命令属于危险操作，执行时仍需再次确认" : "该命令后续可由助手直接执行";
+        String continuationId = continuationService.prepare(proposal.conversationId(), proposal.server().id(),
+                "系统可信事件：用户已确认添加命令“" + command.name() + "”（命令 ID：" + command.id()
+                        + "）。请继续完成用户原来的任务：先重新调用 listCommands 获取最新清单，再按命令 ID 执行。"
+                        + "如果它属于危险命令，仍须生成执行确认选项，不得绕过二次确认。");
         return new ServerCommandProposalResult(actionId, true, "命令已添加到“" + proposal.server().name()
-                + "”；" + riskMessage, command);
+                + "”；" + riskMessage, command, continuationId);
     }
 
     void cancel(String actionId) { proposals.remove(actionId); }

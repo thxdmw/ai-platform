@@ -566,41 +566,117 @@
 
     async function approveOperation(message) {
         if (message.action?.status !== 'PENDING_APPROVAL') return;
+        let resolved = false;
+        streaming = true; updateStreamingState();
         message.action.status = 'PROCESSING'; renderMessages();
         try {
             const result = await api(`/api/server/v1/operations/${encodeURIComponent(message.action.actionId)}/approve`, { method: 'POST' });
+            resolved = true;
             message.action.status = result.success ? 'EXECUTED' : 'FAILED';
             message.action.execution = result.execution; showToast(result.message, 6000);
-        } catch (error) { message.action.status = 'PENDING_APPROVAL'; handleApiError(error); }
-        finally { persistConversations(); renderMessages(); }
+            await continueAfterAction(message, result.continuationId);
+        } catch (error) {
+            if (!resolved) message.action.status = 'PENDING_APPROVAL';
+            handleApiError(error);
+        }
+        finally { streaming = false; persistConversations(); updateStreamingState(); renderAll(); }
     }
 
     async function cancelOperation(message) {
         if (message.action?.status !== 'PENDING_APPROVAL') return;
+        streaming = true; message.action.status = 'PROCESSING'; updateStreamingState(); renderMessages();
         try {
             await api(`/api/server/v1/operations/${encodeURIComponent(message.action.actionId)}`, { method: 'DELETE' });
-            message.action.status = 'CANCELLED'; persistConversations(); renderMessages();
-        } catch (error) { handleApiError(error); }
+            message.action.status = 'CANCELLED';
+            finishCancelledAction('已取消执行命令，本次请求已结束，服务器未执行该操作。');
+        } catch (error) {
+            message.action.status = 'PENDING_APPROVAL'; handleApiError(error);
+        } finally {
+            streaming = false; persistConversations(); updateStreamingState(); renderAll();
+        }
     }
 
     async function approveCommandProposal(message) {
         if (message.action?.status !== 'PENDING_COMMAND_APPROVAL') return;
+        let resolved = false;
+        streaming = true; updateStreamingState();
         message.action.status = 'PROCESSING'; renderMessages();
         try {
             const result = await api(`/api/server/v1/command-proposals/${encodeURIComponent(message.action.actionId)}/approve`, { method: 'POST' });
+            resolved = true;
             message.action.status = 'ADDED'; message.action.commandId = result.command?.id;
-            if (editingServerId === message.action.serverId) await loadCommands(editingServerId);
+            if (editingServerId === message.action.serverId) {
+                try { await loadCommands(editingServerId); }
+                catch (error) { showToast(`命令已添加，但刷新配置列表失败：${error.message}`, 7000); }
+            }
             showToast(result.message, 7000);
-        } catch (error) { message.action.status = 'PENDING_COMMAND_APPROVAL'; handleApiError(error); }
-        finally { persistConversations(); renderMessages(); }
+            await continueAfterAction(message, result.continuationId);
+        } catch (error) {
+            if (!resolved) message.action.status = 'PENDING_COMMAND_APPROVAL';
+            handleApiError(error);
+        }
+        finally { streaming = false; persistConversations(); updateStreamingState(); renderAll(); }
     }
 
     async function cancelCommandProposal(message) {
         if (message.action?.status !== 'PENDING_COMMAND_APPROVAL') return;
+        streaming = true; message.action.status = 'PROCESSING'; updateStreamingState(); renderMessages();
         try {
             await api(`/api/server/v1/command-proposals/${encodeURIComponent(message.action.actionId)}`, { method: 'DELETE' });
-            message.action.status = 'CANCELLED'; persistConversations(); renderMessages();
-        } catch (error) { handleApiError(error); }
+            message.action.status = 'CANCELLED';
+            finishCancelledAction('已取消添加命令，本次请求已结束，服务器配置未发生变化。');
+        } catch (error) {
+            message.action.status = 'PENDING_COMMAND_APPROVAL'; handleApiError(error);
+        } finally {
+            streaming = false; persistConversations(); updateStreamingState(); renderAll();
+        }
+    }
+
+    async function continueAfterAction(actionMessage, continuationId) {
+        const conversation = currentConversation();
+        if (!conversation.messages.includes(actionMessage) || !continuationId) {
+            conversation.messages.push({
+                role: 'assistant',
+                content: '操作已完成，但缺少对话续跑信息。你可以继续提问以获取结果。'
+            });
+            conversation.updatedAt = Date.now();
+            return;
+        }
+        const assistantMessage = { role: 'assistant', content: '', streaming: true };
+        conversation.messages.push(assistantMessage);
+        conversation.messages = conversation.messages.slice(-MAX_MESSAGES);
+        conversation.updatedAt = Date.now(); renderAll();
+        try {
+            const response = await fetch('/api/server/v1/messages/continue', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({
+                    conversationId: conversation.id,
+                    serverId: conversation.serverId,
+                    continuationId
+                })
+            });
+            if (!response.ok) throw await responseError(response);
+            await consumeSse(response, chunk => {
+                assistantMessage.content += chunk; renderMessages();
+            }, action => {
+                assistantMessage.action = action; renderMessages();
+            });
+            if (!assistantMessage.content) assistantMessage.content = '操作已完成，但暂时没有得到后续说明。';
+        } catch (error) {
+            assistantMessage.content = `操作已完成，但继续处理失败：${error.message}`;
+            if (error.status === 401) logout();
+        } finally {
+            assistantMessage.streaming = false;
+            conversation.updatedAt = Date.now();
+        }
+    }
+
+    function finishCancelledAction(content) {
+        const conversation = currentConversation();
+        conversation.messages.push({ role: 'assistant', content });
+        conversation.messages = conversation.messages.slice(-MAX_MESSAGES);
+        conversation.updatedAt = Date.now();
+        persistConversations(); renderAll();
     }
 
     function actionStatus(status) {

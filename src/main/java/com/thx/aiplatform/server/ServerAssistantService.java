@@ -33,12 +33,14 @@ class ServerAssistantService {
     private final ObjectMapper objectMapper;
     private final ServerConversationBindingService conversationBindingService;
     private final ServerCommandProposalService commandProposalService;
+    private final ServerActionContinuationService continuationService;
 
     ServerAssistantService(AssistantChatGateway chatGateway, ServerRegistry registry,
                            ServerConfigurationService configurationService,
                            ServerOperationService operationService, SshCommandExecutor executor,
                            ObjectMapper objectMapper, ServerConversationBindingService conversationBindingService,
-                           ServerCommandProposalService commandProposalService) {
+                           ServerCommandProposalService commandProposalService,
+                           ServerActionContinuationService continuationService) {
         this.chatGateway = chatGateway;
         this.registry = registry;
         this.configurationService = configurationService;
@@ -47,6 +49,7 @@ class ServerAssistantService {
         this.objectMapper = objectMapper;
         this.conversationBindingService = conversationBindingService;
         this.commandProposalService = commandProposalService;
+        this.continuationService = continuationService;
     }
 
     Flux<String> stream(ServerChatRequest request) {
@@ -54,11 +57,24 @@ class ServerAssistantService {
         conversationBindingService.bind(request.conversationId(), server.id());
         operationService.cancelForConversation(request.conversationId());
         commandProposalService.cancelForConversation(request.conversationId());
+        continuationService.cancelForConversation(request.conversationId());
+        return stream(request.conversationId(), server, request.message().trim());
+    }
+
+    Flux<String> continueAfterAction(ServerContinuationRequest request) {
+        ServerDefinition server = registry.requireEnabled(request.serverId());
+        conversationBindingService.bind(request.conversationId(), server.id());
+        String continuationMessage = continuationService.consume(
+                request.continuationId(), request.conversationId(), server.id());
+        return stream(request.conversationId(), server, continuationMessage);
+    }
+
+    private Flux<String> stream(String conversationId, ServerDefinition server, String message) {
         AssistantChatCommand command = new AssistantChatCommand(
-                ASSISTANT_ID, request.conversationId(),
+                ASSISTANT_ID, conversationId,
                 SYSTEM_PROMPT + "\n当前服务器：" + server.name() + "（" + server.id() + "，" + server.host() + ":" + server.port() + "）",
-                request.message().trim());
-        ServerCommandTool tools = new ServerCommandTool(request.conversationId(), server, configurationService,
+                message);
+        ServerCommandTool tools = new ServerCommandTool(conversationId, server, configurationService,
                 operationService, commandProposalService, executor, objectMapper);
         return chatGateway.stream(command, tools);
     }
@@ -69,6 +85,7 @@ class ServerAssistantService {
         }
         operationService.cancelForConversation(conversationId);
         commandProposalService.cancelForConversation(conversationId);
+        continuationService.cancelForConversation(conversationId);
         conversationBindingService.remove(conversationId);
         chatGateway.clear(ASSISTANT_ID, conversationId);
     }

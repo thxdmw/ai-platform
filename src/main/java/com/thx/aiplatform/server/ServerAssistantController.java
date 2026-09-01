@@ -42,21 +42,31 @@ class ServerAssistantController {
     @PostMapping(value = "/messages", consumes = MediaType.APPLICATION_JSON_VALUE,
             produces = MediaType.TEXT_EVENT_STREAM_VALUE + ";charset=UTF-8")
     SseEmitter sendMessage(@Valid @RequestBody ServerChatRequest request) {
+        return stream(request.conversationId(), assistantService.stream(request));
+    }
+
+    @PostMapping(value = "/messages/continue", consumes = MediaType.APPLICATION_JSON_VALUE,
+            produces = MediaType.TEXT_EVENT_STREAM_VALUE + ";charset=UTF-8")
+    SseEmitter continueAfterAction(@Valid @RequestBody ServerContinuationRequest request) {
+        return stream(request.conversationId(), assistantService.continueAfterAction(request));
+    }
+
+    private SseEmitter stream(String conversationId, reactor.core.publisher.Flux<String> response) {
         SseEmitter emitter = new SseEmitter(properties.getSseTimeout().toMillis());
         AtomicBoolean terminated = new AtomicBoolean();
         AtomicInteger contentLength = new AtomicInteger();
         emitter.onTimeout(() -> terminate(emitter, terminated, "服务器助手响应超时，请稍后重试。", null));
         emitter.onError(error -> terminated.set(true));
         emitter.onCompletion(() -> terminated.set(true));
-        assistantService.stream(request).subscribe(
+        response.subscribe(
                 chunk -> sendChunk(emitter, terminated, contentLength, chunk),
                 error -> {
-                    log.error("服务器助手模型调用失败，conversationId={}", request.conversationId(), error);
+                    log.error("服务器助手模型调用失败，conversationId={}", conversationId, error);
                     terminate(emitter, terminated, "服务器助手暂时不可用，请稍后重试。", null);
                 },
                 () -> terminate(emitter, terminated,
                         contentLength.get() == 0 ? "暂时没有得到回答，请换个问法再试。" : null,
-                        pendingAction(request.conversationId()))
+                        pendingAction(conversationId))
         );
         return emitter;
     }

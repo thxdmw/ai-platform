@@ -4,5 +4,6 @@ public record ServerOperationResult(
         String actionId,
         boolean success,
         String message,
-        SshExecutionResult execution
+        SshExecutionResult execution,
+        String continuationId
 ) { }

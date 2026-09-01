@@ -11,6 +11,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -25,14 +26,16 @@ class ServerOperationServiceTest {
         ServerCommandDefinition command = dangerousCommand();
         when(executor.execute(same(server), eq(command.commandText())))
                 .thenReturn(new SshExecutionResult("server-a", 0, "active", "", 120, false));
-        ServerOperationService service = new ServerOperationService(
-                executor, properties(), Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
+        ServerActionContinuationService continuationService = continuationService();
+        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService,
+                Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
 
         PendingServerOperationView pending = service.prepare("conversation-1", server, command, "服务异常");
         verifyNoInteractions(executor);
 
         ServerOperationResult result = service.approve(pending.actionId());
         assertThat(result.success()).isTrue();
+        assertThat(result.continuationId()).isEqualTo("continuation-1");
         verify(executor).execute(same(server), eq(command.commandText()));
         assertThatThrownBy(() -> service.approve(pending.actionId())).hasMessageContaining("不存在或已处理");
     }
@@ -40,7 +43,8 @@ class ServerOperationServiceTest {
     @Test
     void 普通命令不能伪装成待确认危险操作() {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
-        ServerOperationService service = new ServerOperationService(executor, properties(), Clock.systemUTC());
+        ServerOperationService service = new ServerOperationService(
+                executor, properties(), continuationService(), Clock.systemUTC());
         ServerCommandDefinition command = new ServerCommandDefinition(
                 "command-2", "server-a", "查看状态", "查看状态", "uptime", ServerCommandRisk.NORMAL, true, 0);
 
@@ -56,8 +60,8 @@ class ServerOperationServiceTest {
         ServerCommandDefinition command = dangerousCommand();
         when(executor.execute(same(server), eq(command.commandText())))
                 .thenThrow(new IllegalStateException("连接中断"));
-        ServerOperationService service = new ServerOperationService(
-                executor, properties(), Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
+        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService(),
+                Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
 
         PendingServerOperationView pending = service.prepare("conversation-1", server, command, "服务异常");
         ServerOperationResult result = service.approve(pending.actionId());
@@ -82,5 +86,12 @@ class ServerOperationServiceTest {
         ServerAssistantProperties properties = new ServerAssistantProperties();
         properties.setApprovalTtl(Duration.ofMinutes(10));
         return properties;
+    }
+
+    private ServerActionContinuationService continuationService() {
+        ServerActionContinuationService service = mock(ServerActionContinuationService.class);
+        when(service.prepare(eq("conversation-1"), eq("server-a"), argThat(message ->
+                message.contains("系统可信事件")))).thenReturn("continuation-1");
+        return service;
     }
 }

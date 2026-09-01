@@ -1,0 +1,17 @@
+package com.thx.aiplatform.server;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+record ServerContinuationRequest(
+        @NotBlank(message = "conversationId 不能为空")
+        @Pattern(regexp = "[A-Za-z0-9_-]{1,64}", message = "conversationId 格式不合法")
+        String conversationId,
+        @NotBlank(message = "请选择服务器")
+        @Size(max = 36, message = "服务器编号不合法")
+        String serverId,
+        @NotBlank(message = "续跑凭证不能为空")
+        @Size(max = 36, message = "续跑凭证不合法")
+        String continuationId
+) { }

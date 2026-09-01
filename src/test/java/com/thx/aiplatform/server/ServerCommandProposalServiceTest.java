@@ -38,6 +38,7 @@ class ServerCommandProposalServiceTest {
         assertThat(pending.riskLevel()).isEqualTo("NORMAL");
         ServerCommandProposalResult result = service.approve(pending.actionId());
         assertThat(result.command()).isSameAs(saved);
+        assertThat(result.continuationId()).isEqualTo("continuation-1");
         verify(configurationService).createCommand(eq("server-a"), argThat(request ->
                 request.commandText().equals("systemctl status nginx --no-pager")));
     }
@@ -63,7 +64,10 @@ class ServerCommandProposalServiceTest {
                                                  ServerCommandRiskClassifier classifier) {
         ServerAssistantProperties properties = new ServerAssistantProperties();
         properties.setApprovalTtl(Duration.ofMinutes(10));
-        return new ServerCommandProposalService(configurationService, classifier, properties,
+        ServerActionContinuationService continuationService = mock(ServerActionContinuationService.class);
+        when(continuationService.prepare(eq("conversation-1"), eq("server-a"), argThat(message ->
+                message.contains("继续完成用户原来的任务")))).thenReturn("continuation-1");
+        return new ServerCommandProposalService(configurationService, classifier, properties, continuationService,
                 Clock.fixed(Instant.parse("2026-09-01T00:00:00Z"), ZoneOffset.UTC));
     }
 
