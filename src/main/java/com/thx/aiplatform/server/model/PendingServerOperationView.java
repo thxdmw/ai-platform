@@ -13,6 +13,8 @@ public record PendingServerOperationView(
         String commandId,
         String commandName,
         String commandPreview,
+        String workingDirectory,
+        boolean temporary,
         String reason,
         Instant expiresAt,
         String status,

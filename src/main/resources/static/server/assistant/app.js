@@ -605,14 +605,17 @@
         const message = [...conversation.messages].reverse().find(value =>
             ['PENDING_APPROVAL', 'PENDING_COMMAND_APPROVAL'].includes(value.action?.status));
         if (!message) return false;
+        const temporary = message.action.actionType === 'EXECUTE_TEMPORARY_COMMAND';
         const compact = text.replace(/[\s，。！!？?]/g, '');
         const confirm = /^(执行|确认|确认执行|继续执行|同意|添加|确认添加)$/.test(compact);
         const cancel = /^(取消|不执行|取消执行|不添加|取消添加)$/.test(compact);
-        if (!confirm && !cancel) return false;
+        if (!confirm && !cancel && !temporary) return false;
         conversation.messages.push({ role: 'user', content: text });
         conversation.updatedAt = Date.now(); elements.input.value = ''; resizeComposer();
         persistConversations(); renderAll();
-        if (message.action.status === 'PENDING_COMMAND_APPROVAL') {
+        if (temporary && !confirm && !cancel) {
+            await decideTemporaryOperation(message, 'REJECT_WITH_FEEDBACK', text);
+        } else if (message.action.status === 'PENDING_COMMAND_APPROVAL') {
             if (confirm) await approveCommandProposal(message); else await cancelCommandProposal(message);
         } else if (confirm) await approveOperation(message); else await cancelOperation(message);
         return true;
@@ -775,18 +778,20 @@
         copy.addEventListener('click', () => copyText(message.content, copy)); actions.appendChild(copy); return actions;
     }
 
-    // 动作卡片：actionType=ADD_COMMAND 渲染「添加命令」提议，否则渲染「执行命令」确认。
+    // 动作卡片：固定命令添加、固定危险命令和 ReAct 临时命令共用状态骨架，临时命令额外
+    // 提供补充说明与当前对话精确放行，放行规则始终只保存在服务端。
     // 状态机 PENDING_* → PROCESSING → ADDED/EXECUTED/FAILED/CANCELLED/SUPERSEDED，
     // 只在待确认状态渲染操作按钮；危险命令的提议会提示「添加后执行仍需再次确认」。
     function renderAction(message) {
         const action = message.action; const card = document.createElement('section');
         card.className = `operation-action ${String(action.status || '').toLowerCase()}`;
         const addingCommand = action.actionType === 'ADD_COMMAND';
+        const temporary = action.actionType === 'EXECUTE_TEMPORARY_COMMAND';
         const heading = document.createElement('div'); heading.className = 'operation-heading';
         const icon = document.createElement('span'); icon.className = 'operation-icon'; icon.textContent = addingCommand ? '+' : '⚙';
         const text = document.createElement('div');
         const title = document.createElement('h3');
-        title.textContent = `${addingCommand ? '添加命令' : '执行命令'}：${action.commandName || '未命名命令'}`;
+        title.textContent = `${addingCommand ? '添加命令' : temporary ? '审批临时命令' : '执行命令'}：${action.commandName || '未命名命令'}`;
         const meta = document.createElement('p'); meta.textContent = `${action.serverName} · ${action.serverId}`;
         text.append(title, meta); heading.append(icon, text); card.appendChild(heading);
         if (addingCommand && action.commandDescription) {
@@ -794,6 +799,10 @@
             description.textContent = action.commandDescription; card.appendChild(description);
         }
         const reason = document.createElement('p'); reason.className = 'operation-reason'; reason.textContent = action.reason; card.appendChild(reason);
+        if (temporary && action.workingDirectory) {
+            const directory = document.createElement('div'); directory.className = 'operation-directory';
+            directory.textContent = `工作目录：${action.workingDirectory}`; card.appendChild(directory);
+        }
         const command = document.createElement('div'); command.className = 'command-preview'; command.textContent = action.commandPreview; card.appendChild(command);
         if (addingCommand && action.parameterSchema && action.parameterSchema !== '[]') {
             const parameters = document.createElement('div'); parameters.className = 'command-preview';
@@ -806,12 +815,34 @@
                 ? '服务端判定：危险命令 · 添加后执行仍需再次确认'
                 : '服务端判定：普通命令 · 添加后可直接执行';
             card.appendChild(risk);
+        } else if (temporary) {
+            const risk = document.createElement('div'); risk.className = 'proposal-risk dangerous';
+            risk.textContent = '服务端无法证明该命令只读，尚未执行，也不会写入固定命令列表';
+            card.appendChild(risk);
+        }
+        if (temporary && action.status === 'PENDING_APPROVAL') {
+            const feedback = document.createElement('div'); feedback.className = 'operation-feedback';
+            const textarea = document.createElement('textarea'); textarea.rows = 2; textarea.maxLength = 1000;
+            textarea.placeholder = '可以补充限制或纠正计划，例如：先不要删除，只查看文件大小';
+            const submit = actionButton('提交补充', 'revise-operation', () => {
+                const value = textarea.value.trim();
+                if (!value) { showToast('请先填写补充说明'); textarea.focus(); return; }
+                currentConversation().messages.push({ role: 'user', content: value });
+                decideTemporaryOperation(message, 'REJECT_WITH_FEEDBACK', value);
+            });
+            feedback.append(textarea, submit); card.appendChild(feedback);
         }
         const footer = document.createElement('div'); footer.className = 'operation-footer';
         const status = document.createElement('span'); status.textContent = actionStatus(action.status); footer.appendChild(status);
         if (addingCommand && action.status === 'PENDING_COMMAND_APPROVAL') {
             footer.append(actionButton('暂不添加', 'cancel-operation', () => cancelCommandProposal(message)),
                 actionButton('添加命令', 'execute-operation', () => approveCommandProposal(message)));
+        } else if (temporary && action.status === 'PENDING_APPROVAL') {
+            footer.append(actionButton('取消任务', 'cancel-operation', () => cancelOperation(message)),
+                actionButton('本对话允许此命令', 'remember-operation', () =>
+                    decideTemporaryOperation(message, 'EXECUTE_AND_REMEMBER')),
+                actionButton('执行一次', 'execute-operation', () =>
+                    decideTemporaryOperation(message, 'EXECUTE_ONCE')));
         } else if (action.status === 'PENDING_APPROVAL') {
             footer.append(actionButton('取消', 'cancel-operation', () => cancelOperation(message)),
                 actionButton('执行', 'execute-operation', () => approveOperation(message)));
@@ -846,6 +877,31 @@
             handleApiError(error);
         }
         finally { streaming = false; persistConversations(); updateStreamingState(); renderAll(); }
+    }
+
+    // 临时命令审批是 ReAct 暂停点：执行或补充说明都会得到一次性续跑凭证，随后从同一
+    // 会话继续；“本对话允许”只由服务端记录完全相同的目录和命令，前端不保存放行规则。
+    async function decideTemporaryOperation(message, decision, feedback = null) {
+        if (message.action?.status !== 'PENDING_APPROVAL'
+            || message.action.actionType !== 'EXECUTE_TEMPORARY_COMMAND') return;
+        let resolved = false;
+        streaming = true; updateStreamingState();
+        message.action.status = 'PROCESSING'; renderMessages();
+        try {
+            const result = await api(`/api/server/v1/operations/${encodeURIComponent(message.action.actionId)}/decide`, {
+                method: 'POST', body: JSON.stringify({ decision, feedback })
+            });
+            resolved = true;
+            message.action.status = result.status;
+            message.action.execution = result.execution;
+            showToast(result.message, 6000);
+            await continueAfterAction(message, result.continuationId);
+        } catch (error) {
+            if (!resolved) message.action.status = 'PENDING_APPROVAL';
+            handleApiError(error);
+        } finally {
+            streaming = false; persistConversations(); updateStreamingState(); renderAll();
+        }
     }
 
     // 取消只作废服务端的一次性动作，不调用模型——用一个明确的收尾消息结束本轮。
@@ -954,8 +1010,8 @@
 
     function actionStatus(status) {
         return ({ PENDING_APPROVAL: '等待你的确认', PENDING_COMMAND_APPROVAL: '等待你确认添加', PROCESSING: '正在处理…',
-            ADDED: '已添加到当前服务器', EXECUTED: '执行成功', FAILED: '执行失败',
-            CANCELLED: '已取消', SUPERSEDED: '已失效' })[status] || status;
+            ADDED: '已添加到当前服务器', EXECUTED: '执行成功', EXECUTED_AND_REMEMBERED: '已执行 · 本对话已放行相同命令',
+            REVISED: '已拒绝 · 正按补充说明继续', FAILED: '执行失败', CANCELLED: '已取消', SUPERSEDED: '已失效' })[status] || status;
     }
 
     function renderMarkdown(source) {

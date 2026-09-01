@@ -90,7 +90,7 @@
                 <div id="welcome" class="welcome-greeting">
                     <span class="welcome-status">SSH · STRICT HOST KEY</span>
                     <h2>选择服务器后开始对话</h2>
-                    <p>缺少命令时助手会在对话中提出添加建议；危险命令的执行仍会等待确认</p>
+                    <p>只读临时命令自动执行；其他操作会暂停，等待你审批或补充限制</p>
                     <div class="quick-questions">
                         <button type="button" data-question="列出当前服务器可以执行的命令">查看可用命令</button>
                         <button type="button" data-question="检查当前服务器的运行状态">执行健康巡检</button>
@@ -121,7 +121,7 @@
                             </button>
                         </div>
                     </div>
-                    <p class="composer-tip">待确认操作可点击按钮，也可直接回复“执行”或“取消”。</p>
+                    <p class="composer-tip">临时写操作会暂停，可执行、取消或直接补充新的限制。</p>
                 </div>
             </div>
         </section>
@@ -200,7 +200,7 @@
                 </form>
                 <section id="commandSection" class="command-settings" hidden>
                     <div class="settings-section-title">
-                        <div><h3>允许执行的命令</h3><p>可继续手动维护；缺少的命令也能由助手在对话中提议，经你确认后添加到当前服务器。</p></div>
+                        <div><h3>固定命令快捷方式</h3><p>临时任务无需新增命令；这里只维护需要长期复用的参数化快捷方式。</p></div>
                         <div class="command-heading-actions">
                             <button id="installDefaultCommandsButton" class="secondary-button" type="button">补充常用命令</button>
                             <button id="addCommandButton" class="secondary-button" type="button">自定义命令</button>

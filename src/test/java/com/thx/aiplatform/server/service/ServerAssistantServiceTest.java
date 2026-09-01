@@ -35,7 +35,8 @@ class ServerAssistantServiceTest {
                 chatGateway, registry, mock(ServerConfigurationService.class), mock(ServerOperationService.class),
                 mock(SshCommandExecutor.class), mock(ObjectMapper.class), bindingService,
                 mock(ServerCommandProposalService.class), continuationService,
-                mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class));
+                mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class),
+                mock(ServerTemporaryCommandService.class));
 
         service.continueAfterAction(new ServerContinuationRequest(
                 "conversation-1", "server-a", "continuation-1", null, "high")).blockLast();
@@ -58,11 +59,12 @@ class ServerAssistantServiceTest {
                 chatGateway, mock(ServerRegistry.class), mock(ServerConfigurationService.class),
                 operationService, mock(SshCommandExecutor.class), mock(ObjectMapper.class), bindingService,
                 proposalService, continuationService,
-                mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class));
+                mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class),
+                mock(ServerTemporaryCommandService.class));
 
         service.deleteConversation("conversation-1");
 
-        verify(operationService).cancelForConversation("conversation-1");
+        verify(operationService).forgetConversation("conversation-1");
         verify(proposalService).cancelForConversation("conversation-1");
         verify(continuationService).cancelForConversation("conversation-1");
         verify(bindingService).remove("conversation-1");

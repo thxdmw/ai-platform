@@ -1,6 +1,8 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.model.SshExecutionResult;
 import com.thx.aiplatform.server.model.ServerOperationResult;
+import com.thx.aiplatform.server.model.ServerOperationDecisionRequest;
+import com.thx.aiplatform.server.model.ServerOperationDecisionResult;
 import com.thx.aiplatform.server.model.ServerDefinition;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
 import com.thx.aiplatform.server.model.ServerCommandDefinition;
@@ -79,6 +81,46 @@ class ServerOperationServiceTest {
         assertThat(result.message()).contains("结果不确定").contains("连接中断");
         assertThat(result.execution()).isNull();
         assertThatThrownBy(() -> service.approve(pending.actionId())).hasMessageContaining("不存在或已处理");
+    }
+
+    @Test
+    void 拒绝临时命令并补充说明后续跑同一任务() {
+        SshCommandExecutor executor = mock(SshCommandExecutor.class);
+        ServerActionContinuationService continuationService = continuationService();
+        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService,
+                Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
+        PendingServerOperationView pending = service.prepareTemporary(
+                "conversation-1", server(), "/srv/app", "rm -f cache.tmp",
+                "cd -- '/srv/app' && rm -f cache.tmp", "清理缓存");
+
+        ServerOperationDecisionResult result = service.decide(pending.actionId(),
+                new ServerOperationDecisionRequest("REJECT_WITH_FEEDBACK", "不要删除，先查看文件大小"));
+
+        assertThat(result.status()).isEqualTo("REVISED");
+        assertThat(result.continuationId()).isEqualTo("continuation-1");
+        verifyNoInteractions(executor);
+        verify(continuationService).prepare(eq("conversation-1"), eq("server-a"),
+                argThat(message -> message.contains("先查看文件大小") && message.contains("不得执行已拒绝")));
+    }
+
+    @Test
+    void 仅在临时命令成功后记住完全相同的命令和目录() {
+        SshCommandExecutor executor = mock(SshCommandExecutor.class);
+        ServerDefinition server = server();
+        when(executor.execute(same(server), eq("cd -- '/srv/app' && systemctl restart api")))
+                .thenReturn(new SshExecutionResult("server-a", 0, "", "", 50, false));
+        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService(),
+                Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
+        PendingServerOperationView pending = service.prepareTemporary(
+                "conversation-1", server, "/srv/app", "systemctl restart api",
+                "cd -- '/srv/app' && systemctl restart api", "重启服务");
+
+        ServerOperationDecisionResult result = service.decide(pending.actionId(),
+                new ServerOperationDecisionRequest("EXECUTE_AND_REMEMBER", null));
+
+        assertThat(result.status()).isEqualTo("EXECUTED_AND_REMEMBERED");
+        assertThat(service.isTrustedExact("conversation-1", "server-a", "/srv/app", "systemctl restart api")).isTrue();
+        assertThat(service.isTrustedExact("conversation-1", "server-a", "/srv/other", "systemctl restart api")).isFalse();
     }
 
     private ServerDefinition server() {

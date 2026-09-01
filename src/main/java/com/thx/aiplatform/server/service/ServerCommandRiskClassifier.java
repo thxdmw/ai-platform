@@ -21,7 +21,7 @@ public class ServerCommandRiskClassifier {
     private static final Set<String> READ_ONLY_COMMANDS = Set.of(
             "cat", "cut", "df", "dig", "du", "file", "free", "grep", "head", "iostat", "ls", "lsblk",
             "lsof", "mpstat", "netstat", "nproc", "nslookup", "ps", "rg", "sort", "stat", "tail", "tr",
-            "uname", "uniq", "uptime", "vmstat", "wc", "who",
+            "pwd", "uname", "uniq", "uptime", "vmstat", "wc", "who",
             "whoami"
     );
 
@@ -45,6 +45,7 @@ public class ServerCommandRiskClassifier {
             String[] parts = value.split("\\s+");
             String executable = parts[0].toLowerCase(Locale.ROOT);
             if (READ_ONLY_COMMANDS.contains(executable) && isReadOnlyGeneric(executable, parts)) continue;
+            if ("git".equals(executable) && isReadOnlyGit(parts)) continue;
             if ("hostname".equals(executable) && isReadOnlyHostname(parts)) continue;
             if ("ip".equals(executable) && isReadOnlyIp(parts)) continue;
             if ("journalctl".equals(executable) && isReadOnlyJournalctl(parts)) continue;
@@ -61,8 +62,30 @@ public class ServerCommandRiskClassifier {
      * 白名单命令默认只读，唯独 rg 例外：rg --pre 会执行任意命令，必须显式排除才安全。
      */
     private boolean isReadOnlyGeneric(String executable, String[] parts) {
-        if (!"rg".equals(executable)) return true;
-        return Arrays.stream(parts).noneMatch(value -> "--pre".equals(value) || value.startsWith("--pre="));
+        if ("rg".equals(executable)) {
+            return Arrays.stream(parts).noneMatch(value -> "--pre".equals(value) || value.startsWith("--pre="));
+        }
+        if ("sort".equals(executable)) {
+            return Arrays.stream(parts).noneMatch(value -> "-o".equals(value) || "--output".equals(value)
+                    || value.startsWith("--output=") || "--compress-program".equals(value)
+                    || value.startsWith("--compress-program="));
+        }
+        return true;
+    }
+
+    /** Git 只放行不会修改工作区、索引、引用或远端状态的查询子命令。 */
+    private boolean isReadOnlyGit(String[] parts) {
+        if (parts.length < 2) return false;
+        int index = 1;
+        while (index < parts.length && parts[index].startsWith("-")) {
+            String option = parts[index].toLowerCase(Locale.ROOT);
+            if (!(option.equals("--no-pager") || option.equals("--literal-pathspecs")
+                    || option.equals("--glob-pathspecs") || option.equals("--noglob-pathspecs"))) return false;
+            index++;
+        }
+        if (index >= parts.length) return false;
+        return Set.of("status", "diff", "log", "show", "rev-parse", "ls-files", "ls-tree", "describe")
+                .contains(parts[index].toLowerCase(Locale.ROOT));
     }
 
     private boolean isReadOnlyHostname(String[] parts) {

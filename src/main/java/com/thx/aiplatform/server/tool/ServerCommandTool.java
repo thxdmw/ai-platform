@@ -4,6 +4,7 @@ import com.thx.aiplatform.server.service.ServerOperationService;
 import com.thx.aiplatform.server.service.ServerConfigurationService;
 import com.thx.aiplatform.server.service.ServerCommandProposalService;
 import com.thx.aiplatform.server.service.ServerCommandTemplateService;
+import com.thx.aiplatform.server.service.ServerTemporaryCommandService;
 import com.thx.aiplatform.server.model.ServerDefinition;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
 import com.thx.aiplatform.server.model.ServerCommandDefinition;
@@ -40,13 +41,15 @@ public final class ServerCommandTool {
     private final SshCommandExecutor executor;
     private final ObjectMapper objectMapper;
     private final ServerCommandTemplateService templateService;
+    private final ServerTemporaryCommandService temporaryCommandService;
 
     public ServerCommandTool(String conversationId, ServerDefinition server,
                       ServerConfigurationService configurationService,
                       ServerOperationService operationService, ServerCommandProposalService commandProposalService,
                       SshCommandExecutor executor,
                       ObjectMapper objectMapper,
-                      ServerCommandTemplateService templateService) {
+                      ServerCommandTemplateService templateService,
+                      ServerTemporaryCommandService temporaryCommandService) {
         this.conversationId = conversationId;
         this.server = server;
         this.configurationService = configurationService;
@@ -55,6 +58,24 @@ public final class ServerCommandTool {
         this.executor = executor;
         this.objectMapper = objectMapper;
         this.templateService = templateService;
+        this.temporaryCommandService = temporaryCommandService;
+    }
+
+    /**
+     * 无需保存命名的临时命令入口。风险是否只读完全由服务端判定，模型提供的理由不参与
+     * 放行；无法证明只读时工具只会暂停任务并生成审批卡片。
+     */
+    @Tool(description = "为当前任务运行临时 Shell 命令，无需先添加到命令列表。服务端确认只读时自动执行，否则暂停并等待用户选择；不得把危险命令拆分成多个只读命令绕过审批")
+    public String executeTemporaryCommand(
+            @ToolParam(description = "要执行的完整 Shell 命令。保持最小化、可复核，不要自行添加 cd；管道和重定向必须写在这里") String commandText,
+            @ToolParam(description = "可选工作目录，必须是绝对路径；不需要指定时传空字符串") String workingDirectory,
+            @ToolParam(description = "本步骤要验证或改变什么，以及为何需要执行") String reason
+    ) {
+        log.info("模型调用服务器工具，tool=executeTemporaryCommand，conversationId={}，serverId={}",
+                conversationId, server.id());
+        commandProposalService.cancelForConversation(conversationId);
+        return temporaryCommandService.executeOrPrepare(
+                conversationId, server, commandText, workingDirectory, reason);
     }
 
     /**

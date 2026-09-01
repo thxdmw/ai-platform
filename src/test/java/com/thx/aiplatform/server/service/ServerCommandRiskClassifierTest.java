@@ -20,6 +20,8 @@ class ServerCommandRiskClassifierTest {
                 .isEqualTo(ServerCommandRisk.NORMAL);
         assertThat(classifier.classify("ss -tlnp | grep LISTEN")).isEqualTo(ServerCommandRisk.NORMAL);
         assertThat(classifier.classify("ip route show")).isEqualTo(ServerCommandRisk.NORMAL);
+        assertThat(classifier.classify("git status --short")).isEqualTo(ServerCommandRisk.NORMAL);
+        assertThat(classifier.classify("git --no-pager diff --stat")).isEqualTo(ServerCommandRisk.NORMAL);
     }
 
     @Test
@@ -34,5 +36,8 @@ class ServerCommandRiskClassifierTest {
         assertThat(classifier.classify("ss -K dst 10.0.0.1")).isEqualTo(ServerCommandRisk.DANGEROUS);
         assertThat(classifier.classify("rg --pre 'sh cleanup.sh' error /var/log"))
                 .isEqualTo(ServerCommandRisk.DANGEROUS);
+        assertThat(classifier.classify("sort --output=/tmp/result data.txt"))
+                .isEqualTo(ServerCommandRisk.DANGEROUS);
+        assertThat(classifier.classify("git checkout main")).isEqualTo(ServerCommandRisk.DANGEROUS);
     }
 }
