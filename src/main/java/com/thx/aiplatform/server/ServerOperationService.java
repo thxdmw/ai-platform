@@ -78,7 +78,7 @@ class ServerOperationService {
     private PendingServerOperationView toView(PendingOperation pending) {
         return new PendingServerOperationView(pending.actionId(), pending.server().id(), pending.server().name(),
                 pending.command().id(), pending.command().name(), pending.command().commandText(), pending.reason(),
-                pending.expiresAt(), "PENDING_APPROVAL");
+                pending.expiresAt(), "PENDING_APPROVAL", "EXECUTE_COMMAND");
     }
 
     private String normalizeReason(String reason) {

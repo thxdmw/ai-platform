@@ -28,12 +28,15 @@ class ServerAssistantController {
     private final ServerAssistantService assistantService;
     private final ServerOperationService operationService;
     private final ServerAssistantProperties properties;
+    private final ServerCommandProposalService commandProposalService;
 
     ServerAssistantController(ServerAssistantService assistantService, ServerOperationService operationService,
-                              ServerAssistantProperties properties) {
+                              ServerAssistantProperties properties,
+                              ServerCommandProposalService commandProposalService) {
         this.assistantService = assistantService;
         this.operationService = operationService;
         this.properties = properties;
+        this.commandProposalService = commandProposalService;
     }
 
     @PostMapping(value = "/messages", consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -53,7 +56,7 @@ class ServerAssistantController {
                 },
                 () -> terminate(emitter, terminated,
                         contentLength.get() == 0 ? "暂时没有得到回答，请换个问法再试。" : null,
-                        operationService.findForConversation(request.conversationId()))
+                        pendingAction(request.conversationId()))
         );
         return emitter;
     }
@@ -75,7 +78,7 @@ class ServerAssistantController {
     }
 
     private void terminate(SseEmitter emitter, AtomicBoolean terminated, String finalMessage,
-                           PendingServerOperationView operation) {
+                           Object operation) {
         if (!terminated.compareAndSet(false, true)) return;
         try {
             if (finalMessage != null) emitter.send(SseEmitter.event().data(finalMessage, UTF8_TEXT));
@@ -85,5 +88,10 @@ class ServerAssistantController {
         } catch (IOException exception) {
             emitter.completeWithError(exception);
         }
+    }
+
+    private Object pendingAction(String conversationId) {
+        PendingServerOperationView operation = operationService.findForConversation(conversationId);
+        return operation != null ? operation : commandProposalService.findForConversation(conversationId);
     }
 }

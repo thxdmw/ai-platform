@@ -510,7 +510,7 @@
             else { content.innerHTML = renderMarkdown(message.content || ''); decorateCodeBlocks(content); }
         } else content.textContent = message.content;
         stack.appendChild(content);
-        if (message.action) stack.appendChild(renderOperation(message));
+        if (message.action) stack.appendChild(renderAction(message));
         if (!message.streaming && message.content) stack.appendChild(renderCopy(message));
         row.appendChild(stack); return row;
     }
@@ -522,20 +522,37 @@
         copy.addEventListener('click', () => copyText(message.content, copy)); actions.appendChild(copy); return actions;
     }
 
-    function renderOperation(message) {
+    function renderAction(message) {
         const action = message.action; const card = document.createElement('section');
         card.className = `operation-action ${String(action.status || '').toLowerCase()}`;
+        const addingCommand = action.actionType === 'ADD_COMMAND';
         const heading = document.createElement('div'); heading.className = 'operation-heading';
-        const icon = document.createElement('span'); icon.className = 'operation-icon'; icon.textContent = '⚙';
+        const icon = document.createElement('span'); icon.className = 'operation-icon'; icon.textContent = addingCommand ? '+' : '⚙';
         const text = document.createElement('div');
-        const title = document.createElement('h3'); title.textContent = `执行命令：${action.commandName || '未命名命令'}`;
+        const title = document.createElement('h3');
+        title.textContent = `${addingCommand ? '添加命令' : '执行命令'}：${action.commandName || '未命名命令'}`;
         const meta = document.createElement('p'); meta.textContent = `${action.serverName} · ${action.serverId}`;
         text.append(title, meta); heading.append(icon, text); card.appendChild(heading);
+        if (addingCommand && action.commandDescription) {
+            const description = document.createElement('p'); description.className = 'operation-description';
+            description.textContent = action.commandDescription; card.appendChild(description);
+        }
         const reason = document.createElement('p'); reason.className = 'operation-reason'; reason.textContent = action.reason; card.appendChild(reason);
         const command = document.createElement('div'); command.className = 'command-preview'; command.textContent = action.commandPreview; card.appendChild(command);
+        if (addingCommand) {
+            const risk = document.createElement('div');
+            risk.className = `proposal-risk ${action.riskLevel === 'DANGEROUS' ? 'dangerous' : ''}`;
+            risk.textContent = action.riskLevel === 'DANGEROUS'
+                ? '服务端判定：危险命令 · 添加后执行仍需再次确认'
+                : '服务端判定：普通命令 · 添加后可直接执行';
+            card.appendChild(risk);
+        }
         const footer = document.createElement('div'); footer.className = 'operation-footer';
         const status = document.createElement('span'); status.textContent = actionStatus(action.status); footer.appendChild(status);
-        if (action.status === 'PENDING_APPROVAL') {
+        if (addingCommand && action.status === 'PENDING_COMMAND_APPROVAL') {
+            footer.append(actionButton('暂不添加', 'cancel-operation', () => cancelCommandProposal(message)),
+                actionButton('添加命令', 'execute-operation', () => approveCommandProposal(message)));
+        } else if (action.status === 'PENDING_APPROVAL') {
             footer.append(actionButton('取消', 'cancel-operation', () => cancelOperation(message)),
                 actionButton('执行', 'execute-operation', () => approveOperation(message)));
         }
@@ -566,8 +583,29 @@
         } catch (error) { handleApiError(error); }
     }
 
+    async function approveCommandProposal(message) {
+        if (message.action?.status !== 'PENDING_COMMAND_APPROVAL') return;
+        message.action.status = 'PROCESSING'; renderMessages();
+        try {
+            const result = await api(`/api/server/v1/command-proposals/${encodeURIComponent(message.action.actionId)}/approve`, { method: 'POST' });
+            message.action.status = 'ADDED'; message.action.commandId = result.command?.id;
+            if (editingServerId === message.action.serverId) await loadCommands(editingServerId);
+            showToast(result.message, 7000);
+        } catch (error) { message.action.status = 'PENDING_COMMAND_APPROVAL'; handleApiError(error); }
+        finally { persistConversations(); renderMessages(); }
+    }
+
+    async function cancelCommandProposal(message) {
+        if (message.action?.status !== 'PENDING_COMMAND_APPROVAL') return;
+        try {
+            await api(`/api/server/v1/command-proposals/${encodeURIComponent(message.action.actionId)}`, { method: 'DELETE' });
+            message.action.status = 'CANCELLED'; persistConversations(); renderMessages();
+        } catch (error) { handleApiError(error); }
+    }
+
     function actionStatus(status) {
-        return ({ PENDING_APPROVAL: '等待你的确认', PROCESSING: '正在执行…', EXECUTED: '执行成功', FAILED: '执行失败',
+        return ({ PENDING_APPROVAL: '等待你的确认', PENDING_COMMAND_APPROVAL: '等待你确认添加', PROCESSING: '正在处理…',
+            ADDED: '已添加到当前服务器', EXECUTED: '执行成功', FAILED: '执行失败',
             CANCELLED: '已取消', SUPERSEDED: '已失效' })[status] || status;
     }
 
@@ -656,7 +694,9 @@
 
     function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, title: '新对话', messages: [], updatedAt: Date.now() }; }
     function currentConversation() { return conversations.find(value => value.id === currentConversationId) || conversations[0]; }
-    function expireActions(conversation) { conversation.messages.forEach(message => { if (message.action?.status === 'PENDING_APPROVAL') message.action.status = 'SUPERSEDED'; }); }
+    function expireActions(conversation) { conversation.messages.forEach(message => {
+        if (['PENDING_APPROVAL', 'PENDING_COMMAND_APPROVAL'].includes(message.action?.status)) message.action.status = 'SUPERSEDED';
+    }); }
     function loadConversations() { try { const value = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY)); return Array.isArray(value) ? value.slice(0, MAX_CONVERSATIONS) : []; } catch (_) { return []; } }
     function persistConversations() { localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations.slice(0, MAX_CONVERSATIONS))); }
 

@@ -9,17 +9,21 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.ResponseStatus;
 
 @RestController
-@RequestMapping("/api/server/v1/operations")
-class ServerOperationController {
+@RequestMapping("/api/server/v1/command-proposals")
+class ServerCommandProposalController {
 
-    private final ServerOperationService operationService;
+    private final ServerCommandProposalService proposalService;
 
-    ServerOperationController(ServerOperationService operationService) { this.operationService = operationService; }
+    ServerCommandProposalController(ServerCommandProposalService proposalService) {
+        this.proposalService = proposalService;
+    }
 
     @PostMapping("/{actionId}/approve")
-    ServerOperationResult approve(@PathVariable String actionId) { return operationService.approve(actionId); }
+    ServerCommandProposalResult approve(@PathVariable String actionId) {
+        return proposalService.approve(actionId);
+    }
 
     @DeleteMapping("/{actionId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    void cancel(@PathVariable String actionId) { operationService.cancel(actionId); }
+    void cancel(@PathVariable String actionId) { proposalService.cancel(actionId); }
 }

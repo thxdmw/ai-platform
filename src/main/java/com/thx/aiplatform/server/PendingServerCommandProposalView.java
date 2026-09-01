@@ -2,13 +2,14 @@ package com.thx.aiplatform.server;
 
 import java.time.Instant;
 
-public record PendingServerOperationView(
+public record PendingServerCommandProposalView(
         String actionId,
         String serverId,
         String serverName,
-        String commandId,
         String commandName,
+        String commandDescription,
         String commandPreview,
+        String riskLevel,
         String reason,
         Instant expiresAt,
         String status,
