@@ -50,6 +50,8 @@ steps:
 
   - name: notify-pushplus
     image: curlimages/curl:8.12.1
+    depends_on:
+      - deploy
     failure: ignore
     environment:
       PUSHPLUS_TOKEN:
