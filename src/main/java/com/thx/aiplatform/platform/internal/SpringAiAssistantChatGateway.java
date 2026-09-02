@@ -1,5 +1,11 @@
 package com.thx.aiplatform.platform.internal;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
 import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;
 import com.thx.aiplatform.platform.AssistantStreamEvent;
@@ -15,13 +21,19 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.anthropic.api.AnthropicApi;
+import org.springframework.http.codec.json.Jackson2JsonDecoder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
+import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * {@link AssistantChatGateway} 的 Spring AI 实现，位于 platform.internal 内部包。
@@ -38,13 +50,15 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
 
     private final ChatClient chatClient;
     private final ChatMemory memory;
+    private final ObjectMapper objectMapper;
 
     // ChatClient 与记忆 Advisor 在构造期一次绑定：调用方只能按 command 对话，
     // 无法绕过记忆层裸调模型，避免各模块各自管理上下文导致行为不一致。
-    SpringAiAssistantChatGateway(ChatClient.Builder builder) {
+    SpringAiAssistantChatGateway(ChatClient.Builder builder, ObjectMapper objectMapper) {
         this.memory = MessageWindowChatMemory.builder()
                 .maxMessages(MEMORY_MESSAGE_LIMIT)
                 .build();
+        this.objectMapper = objectMapper;
         this.chatClient = builder
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
                 .build();
@@ -64,17 +78,26 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
 
     @Override
     public Flux<AssistantStreamEvent> streamEvents(AssistantChatCommand command, Object... tools) {
-        long startedAt = System.nanoTime();
-        return request(command, tools).stream().chatResponse()
-                .concatMap(response -> Flux.fromIterable(toEvents(response)))
-                .doOnSubscribe(ignored -> log.info("模型流开始，assistantId={}，conversationId={}，model={}，provider={}",
-                        command.assistantId(), command.conversationId(), modelName(command), providerHost(command)))
-                .doOnComplete(() -> log.info("模型流完成，assistantId={}，conversationId={}，耗时={}ms",
-                        command.assistantId(), command.conversationId(), elapsedMillis(startedAt)))
-                .doOnCancel(() -> log.info("模型流取消，assistantId={}，conversationId={}，耗时={}ms",
-                        command.assistantId(), command.conversationId(), elapsedMillis(startedAt)))
-                .doOnError(error -> log.error("模型流失败，assistantId={}，conversationId={}，model={}，耗时={}ms",
-                        command.assistantId(), command.conversationId(), modelName(command), elapsedMillis(startedAt), error));
+        return Flux.defer(() -> {
+            long startedAt = System.nanoTime();
+            StreamEventMapper mapper = new StreamEventMapper();
+            AtomicLong reasoningCharacters = new AtomicLong();
+            AtomicLong contentCharacters = new AtomicLong();
+            return request(command, tools).stream().chatResponse()
+                    .concatMap(response -> Flux.fromIterable(mapper.map(response)))
+                    .concatWith(Flux.defer(() -> Flux.fromIterable(mapper.finish())))
+                    .doOnNext(event -> {
+                        if (event.type() == AssistantStreamEvent.Type.REASONING) reasoningCharacters.addAndGet(event.content().length());
+                        else contentCharacters.addAndGet(event.content().length());
+                    })
+                    .doOnSubscribe(ignored -> log.info("模型流开始，assistantId={}，conversationId={}，model={}，provider={}",
+                            command.assistantId(), command.conversationId(), modelName(command), providerHost(command)))
+                    .doOnComplete(() -> logCompletion(command, startedAt, reasoningCharacters.get(), contentCharacters.get()))
+                    .doOnCancel(() -> log.info("模型流取消，assistantId={}，conversationId={}，耗时={}ms",
+                            command.assistantId(), command.conversationId(), elapsedMillis(startedAt)))
+                    .doOnError(error -> log.error("模型流失败，assistantId={}，conversationId={}，model={}，耗时={}ms",
+                            command.assistantId(), command.conversationId(), modelName(command), elapsedMillis(startedAt), error));
+        });
     }
 
     private ChatClient.ChatClientRequestSpec request(AssistantChatCommand command, Object... tools) {
@@ -110,13 +133,30 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
                 .baseUrl(connection.baseUrl())
                 .apiKey(connection.apiKey())
                 .completionsPath(connection.chatCompletionsPath())
+                .webClientBuilder(WebClient.builder().codecs(codecs -> codecs.defaultCodecs()
+                        .jackson2JsonDecoder(new Jackson2JsonDecoder(compatibleOpenAiObjectMapper()))))
                 .build();
         OpenAiChatOptions.Builder options = OpenAiChatOptions.builder().model(connection.model());
-        if (connection.reasoningEffort() != null) options.reasoningEffort(connection.reasoningEffort());
+        if (connection.reasoningEffort() != null) options.reasoningEffort(openAiReasoningEffort(connection.reasoningEffort()));
         OpenAiChatModel model = OpenAiChatModel.builder().openAiApi(api).defaultOptions(options.build()).build();
         return ChatClient.builder(model)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(memory).build())
                 .build();
+    }
+
+    private String openAiReasoningEffort(String effort) {
+        // 页面把最高档统一称为 Max；Chat Completions 兼容网关（包括 OpenCode Go）对应的协议值是 xhigh。
+        return "max".equals(effort) ? "xhigh" : effort;
+    }
+
+    private ObjectMapper compatibleOpenAiObjectMapper() {
+        ObjectMapper delegate = objectMapper.copy();
+        ObjectMapper compatible = objectMapper.copy();
+        SimpleModule module = new SimpleModule("openai-compatible-reasoning");
+        module.addDeserializer(OpenAiApi.ChatCompletionMessage.class,
+                new CompatibleOpenAiMessageDeserializer(delegate));
+        compatible.registerModule(module);
+        return compatible;
     }
 
     private ChatClient customAnthropicClient(AssistantChatCommand command) {
@@ -164,21 +204,167 @@ class SpringAiAssistantChatGateway implements AssistantChatGateway {
         return assistantId + ":" + conversationId;
     }
 
-    private List<AssistantStreamEvent> toEvents(org.springframework.ai.chat.model.ChatResponse response) {
-        if (response == null || response.getResult() == null || response.getResult().getOutput() == null) return List.of();
-        var output = response.getResult().getOutput();
-        List<AssistantStreamEvent> events = new ArrayList<>(2);
-        Object metadataReasoning = output.getMetadata().get("reasoningContent");
-        String reasoning = metadataReasoning == null ? null : metadataReasoning.toString();
-        if (output instanceof org.springframework.ai.deepseek.DeepSeekAssistantMessage deepSeekMessage) {
-            reasoning = deepSeekMessage.getReasoningContent();
+    private void logCompletion(AssistantChatCommand command, long startedAt, long reasoningCharacters, long contentCharacters) {
+        log.info("模型流完成，assistantId={}，conversationId={}，耗时={}ms，reasoningChars={}，contentChars={}",
+                command.assistantId(), command.conversationId(), elapsedMillis(startedAt), reasoningCharacters, contentCharacters);
+        if (expectsReasoning(command) && reasoningCharacters == 0) {
+            log.warn("模型未返回独立思考内容，assistantId={}，conversationId={}，model={}，provider={}；"
+                            + "请确认模型支持推理且协议会返回 reasoning_content/thinking，而不是把正文误当作思考过程",
+                    command.assistantId(), command.conversationId(), modelName(command), providerHost(command));
         }
-        if (output.getMetadata().containsKey("signature")) reasoning = output.getText();
-        if (reasoning != null && !reasoning.isBlank()) events.add(AssistantStreamEvent.reasoning(reasoning));
-        if (!output.getMetadata().containsKey("signature") && output.getText() != null && !output.getText().isBlank()) {
-            events.add(AssistantStreamEvent.content(output.getText()));
+    }
+
+    private boolean expectsReasoning(AssistantChatCommand command) {
+        if (command.modelConnection() == null) return false;
+        String effort = command.modelConnection().reasoningEffort();
+        return effort != null && !"none".equals(effort);
+    }
+
+    /**
+     * OpenAI 兼容网关并没有统一思考字段：标准 DeepSeek 使用 reasoning_content，部分聚合网关使用
+     * thinking/reasoning_details，另一些会把它包进 &lt;think&gt;。这里仅拆分提供方明确标记的内容，
+     * 不会为了让界面“看起来有思考”而把普通正文伪装成推理。
+     */
+    static final class StreamEventMapper {
+        private static final List<String> REASONING_KEYS = List.of(
+                "reasoningContent", "reasoning_content", "reasoning", "thinking", "reasoning_details");
+        private static final String THINK_START = "<think>";
+        private static final String THINK_END = "</think>";
+        private final StringBuilder pending = new StringBuilder();
+        private boolean insideThink;
+
+        List<AssistantStreamEvent> map(org.springframework.ai.chat.model.ChatResponse response) {
+            if (response == null || response.getResult() == null || response.getResult().getOutput() == null) return List.of();
+            var output = response.getResult().getOutput();
+            List<AssistantStreamEvent> events = new ArrayList<>(2);
+            String reasoning = reasoningFrom(output.getMetadata());
+            if (output instanceof org.springframework.ai.deepseek.DeepSeekAssistantMessage deepSeekMessage) {
+                reasoning = deepSeekMessage.getReasoningContent();
+            }
+            boolean anthropicThinking = output.getMetadata().containsKey("signature");
+            if (anthropicThinking) reasoning = output.getText();
+            if (reasoning != null && !reasoning.isBlank()) events.add(AssistantStreamEvent.reasoning(reasoning));
+            if (!anthropicThinking && output.getText() != null && !output.getText().isBlank()) {
+                // 没有独立字段时仍兼容聚合网关常见的 XML think 块；普通正文只延迟最多 7 个字符。
+                events.addAll(splitText(output.getText()));
+            }
+            return events;
         }
-        return events;
+
+        List<AssistantStreamEvent> finish() {
+            if (pending.isEmpty()) return List.of();
+            String value = pending.toString();
+            pending.setLength(0);
+            return List.of(insideThink ? AssistantStreamEvent.reasoning(value) : AssistantStreamEvent.content(value));
+        }
+
+        private List<AssistantStreamEvent> splitText(String chunk) {
+            pending.append(chunk);
+            List<AssistantStreamEvent> events = new ArrayList<>();
+            while (!pending.isEmpty()) {
+                String marker = insideThink ? THINK_END : THINK_START;
+                int markerIndex = pending.indexOf(marker);
+                if (markerIndex >= 0) {
+                    add(events, pending.substring(0, markerIndex), insideThink);
+                    pending.delete(0, markerIndex + marker.length());
+                    insideThink = !insideThink;
+                    continue;
+                }
+                int safeLength = pending.length() - longestMarkerPrefixSuffix(pending, marker);
+                if (safeLength <= 0) break;
+                add(events, pending.substring(0, safeLength), insideThink);
+                pending.delete(0, safeLength);
+            }
+            return events;
+        }
+
+        private int longestMarkerPrefixSuffix(StringBuilder value, String marker) {
+            int limit = Math.min(value.length(), marker.length() - 1);
+            for (int length = limit; length > 0; length--) {
+                if (value.substring(value.length() - length).equals(marker.substring(0, length))) return length;
+            }
+            return 0;
+        }
+
+        private void add(List<AssistantStreamEvent> events, String value, boolean reasoning) {
+            if (value.isBlank()) return;
+            events.add(reasoning ? AssistantStreamEvent.reasoning(value) : AssistantStreamEvent.content(value));
+        }
+
+        private String reasoningFrom(Map<String, Object> metadata) {
+            for (String key : REASONING_KEYS) {
+                String value = reasoningValue(metadata.get(key));
+                if (value != null && !value.isBlank()) return value;
+            }
+            return null;
+        }
+
+        private String reasoningValue(Object value) {
+            if (value == null) return null;
+            if (value instanceof CharSequence sequence) return sequence.toString();
+            if (value instanceof Map<?, ?> map) {
+                for (String key : List.of("text", "content", "summary", "reasoning")) {
+                    String nested = reasoningValue(map.get(key));
+                    if (nested != null && !nested.isBlank()) return nested;
+                }
+                return null;
+            }
+            if (value instanceof Collection<?> collection) {
+                return collection.stream().map(this::reasoningValue).filter(item -> item != null && !item.isBlank())
+                        .reduce((left, right) -> left + right).orElse(null);
+            }
+            return value.toString();
+        }
+    }
+
+    /**
+     * Spring AI 原生只声明 reasoning_content；OpenCode Go 等兼容网关还可能返回 thinking、reasoning 或
+     * reasoning_details。先用原始映射保留工具调用等全部字段，再只补齐缺失的 reasoningContent。
+     */
+    static final class CompatibleOpenAiMessageDeserializer extends StdDeserializer<OpenAiApi.ChatCompletionMessage> {
+        private final ObjectMapper delegate;
+
+        CompatibleOpenAiMessageDeserializer(ObjectMapper delegate) {
+            super(OpenAiApi.ChatCompletionMessage.class);
+            this.delegate = delegate;
+        }
+
+        @Override
+        public OpenAiApi.ChatCompletionMessage deserialize(JsonParser parser, DeserializationContext context) throws IOException {
+            JsonNode node = parser.getCodec().readTree(parser);
+            OpenAiApi.ChatCompletionMessage original = delegate.treeToValue(node, OpenAiApi.ChatCompletionMessage.class);
+            String reasoning = original.reasoningContent();
+            if (reasoning == null || reasoning.isBlank()) reasoning = reasoningFrom(node);
+            return new OpenAiApi.ChatCompletionMessage(original.rawContent(), original.role(), original.name(),
+                    original.toolCallId(), original.toolCalls(), original.refusal(), original.audioOutput(),
+                    original.annotations(), reasoning);
+        }
+
+        private String reasoningFrom(JsonNode node) {
+            for (String key : List.of("thinking", "reasoning", "reasoning_details")) {
+                String value = reasoningValue(node.get(key));
+                if (value != null && !value.isBlank()) return value;
+            }
+            return null;
+        }
+
+        private String reasoningValue(JsonNode node) {
+            if (node == null || node.isNull()) return null;
+            if (node.isTextual() || node.isNumber() || node.isBoolean()) return node.asText();
+            if (node.isArray()) {
+                StringBuilder value = new StringBuilder();
+                node.forEach(item -> {
+                    String part = reasoningValue(item);
+                    if (part != null && !part.isBlank()) value.append(part);
+                });
+                return value.isEmpty() ? null : value.toString();
+            }
+            for (String key : List.of("text", "content", "summary", "reasoning")) {
+                String value = reasoningValue(node.get(key));
+                if (value != null && !value.isBlank()) return value;
+            }
+            return null;
+        }
     }
 
     private String modelName(AssistantChatCommand command) {

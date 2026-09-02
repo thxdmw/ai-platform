@@ -43,7 +43,10 @@
         disableSelectedCommands: document.querySelector('#disableSelectedCommands'),
         deleteSelectedCommands: document.querySelector('#deleteSelectedCommands'),
         modelProviderList: document.querySelector('#modelProviderList'),
-        modelProviderForm: document.querySelector('#modelProviderForm')
+        modelProviderForm: document.querySelector('#modelProviderForm'),
+        userProfileButton: document.querySelector('#userProfileButton'),
+        profileMenu: document.querySelector('#profileMenu'),
+        serverConnectionDetails: document.querySelector('#serverConnectionDetails')
     };
 
     let token = sessionStorage.getItem(TOKEN_KEY) || '';
@@ -87,10 +90,11 @@
         document.querySelector('#cancelConversationManagement').addEventListener('click', () => setConversationManagement(false));
         elements.selectAllConversations.addEventListener('change', toggleAllConversations);
         elements.deleteSelectedConversations.addEventListener('click', deleteSelectedConversations);
-        document.querySelector('#logoutButton').addEventListener('click', logout);
+        elements.userProfileButton.addEventListener('click', toggleProfileMenu);
+        document.querySelector('#logoutButton').addEventListener('click', () => { closeProfileMenu(); logout(); });
         document.querySelector('#openSettingsButton').addEventListener('click', openSettings);
         document.querySelector('#closeSettingsButton').addEventListener('click', closeSettings);
-        document.querySelector('#globalSettingsButton').addEventListener('click', openGlobalSettings);
+        document.querySelector('#globalSettingsButton').addEventListener('click', () => { closeProfileMenu(); openGlobalSettings(); });
         document.querySelector('#closeGlobalSettingsButton').addEventListener('click', closeGlobalSettings);
         document.querySelector('#addServerButton').addEventListener('click', () => editServer(null));
         document.querySelector('#installDefaultCommandsButton').addEventListener('click', installDefaultCommands);
@@ -138,10 +142,11 @@
         document.addEventListener('click', event => {
             if (!event.target.closest('.server-picker')) closeServerMenu();
             if (!event.target.closest('.composer-model-picker')) closeModelMenu();
+            if (!event.target.closest('.profile-menu-wrapper')) closeProfileMenu();
         });
         document.addEventListener('keydown', event => {
             if (event.key !== 'Escape') return;
-            closeServerMenu(); closeModelMenu();
+            closeServerMenu(); closeModelMenu(); closeProfileMenu();
             if (!elements.globalSettingsOverlay.hidden) closeGlobalSettings();
             else if (!elements.settingsOverlay.hidden) closeSettings();
         });
@@ -374,6 +379,17 @@
         elements.modelProviderForm.hidden = true;
     }
 
+    function toggleProfileMenu() {
+        const opening = elements.profileMenu.hidden;
+        elements.profileMenu.hidden = !opening;
+        elements.userProfileButton.setAttribute('aria-expanded', String(opening));
+    }
+
+    function closeProfileMenu() {
+        elements.profileMenu.hidden = true;
+        elements.userProfileButton.setAttribute('aria-expanded', 'false');
+    }
+
     // 打开服务器配置时默认选中「当前对话的服务器」；没有服务器时进入新增表单。
     async function openSettings() {
         elements.settingsOverlay.hidden = false;
@@ -420,6 +436,8 @@
         field('serverPassphrase').value = '';
         field('serverHostKey').value = server?.hostKey || '';
         field('serverEnabled').checked = server?.enabled ?? true;
+        // 已保存配置通常只需要管理快捷命令；新增时才展开必填的连接表单。
+        elements.serverConnectionDetails.open = !server;
         field('serverFormHint').textContent = server
             ? '凭据留空表示继续使用已加密保存的值' : '新增服务器时请填写完整凭据';
         field('serverFormError').textContent = '';
@@ -542,7 +560,9 @@
             const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'command-delete';
             remove.textContent = '×'; remove.setAttribute('aria-label', `删除命令：${command.name}`);
             remove.addEventListener('click', () => deleteCommandRecord(command));
-            item.append(checkbox, main, risk, visibility, toggleLabel, remove);
+            const meta = document.createElement('div'); meta.className = 'command-item-meta';
+            meta.append(risk, visibility, toggleLabel, remove);
+            item.append(checkbox, main, meta);
             elements.commandList.appendChild(item);
         });
         syncCommandSelectionControls(visibleCommands);

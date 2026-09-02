@@ -64,16 +64,18 @@ mvn spring-boot:run
 服务器对话还可配置 OpenAI Chat Completions 或 Anthropic Messages 提供方，测试连接并拉取模型目录；模型显式
 返回的思考内容会通过独立事件在页面折叠展示。OpenAI Responses 协议当前可测试和读取目录，但因 Spring AI 1.1
 尚无工具调用适配而不会出现在可用模型选择中。提供方 API 密钥同样加密保存。自定义提供方是平台全局配置，
-入口位于左下角“设置”，每个服务器对话都可在输入框中按“提供方 → 模型”选择，并用滑块调整推理等级。
+点击左下角用户资料区后可进入“模型设置”，每个服务器对话都可在输入框中按“提供方 → 模型”选择，并用滑块调整推理等级。
 配置方法与权限说明见 [服务器助手文档](docs/server-assistant.md)。
 
 ## CI/CD
 
-Drone 在 `master` 分支推送时执行 Maven 测试和组件语法检查，全部通过后连接服务器部署精确提交。部署脚本会先构建候选镜像，健康检查通过后才更新稳定版本；失败时自动恢复上一镜像。
+Drone 在 `master` 分支推送时执行 Maven 测试和组件语法检查，全部通过后连接服务器部署精确提交。部署脚本会先构建候选镜像，健康检查通过后才更新稳定版本；失败时自动恢复上一镜像。流水线结束后会通过 PushPlus 向微信发送成功或失败通知，通知故障不会改变部署结果。
 
 首次部署前需要：
 
 1. 将 `.env.example` 复制到服务器 `/app/ai-platform/.env`，填写模型、PostgreSQL 和助手配置。
 2. 使用 `openssl rand -base64 32` 生成并妥善备份 `SERVER_CREDENTIAL_MASTER_KEY`。
 3. 在 Drone 中配置 `ssh_host`、`ssh_port`、`ssh_username`、`ssh_password`。
-4. 配置 `ai.thxdxw.cn` DNS 和 Nginx，示例位于 `deploy/nginx/ai.thxdxw.cn.conf.example`。
+4. 在 PushPlus 公众号完成微信绑定，从“开发设置”复制用户 Token；在 Drone 仓库的 Settings → Secrets 新建名为 `pushplus_token` 的仓库 Secret，值填写该 Token。不要把 Token 直接写进 `.drone.yml`。
+5. 重新触发一次 `master` 分支流水线；最后的 `notify-pushplus` 步骤会打印 PushPlus 接口响应，微信应收到包含状态、提交和构建链接的消息。
+6. 配置 `ai.thxdxw.cn` DNS 和 Nginx，示例位于 `deploy/nginx/ai.thxdxw.cn.conf.example`。

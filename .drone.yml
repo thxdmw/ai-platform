@@ -48,6 +48,27 @@ steps:
         - sudo git checkout --force --detach ${DRONE_COMMIT_SHA}
         - sudo env DEPLOY_RELEASE_TAG=${DRONE_COMMIT_SHA} bash ./deploy.sh
 
+  - name: notify-pushplus
+    image: curlimages/curl:8.12.1
+    failure: ignore
+    environment:
+      PUSHPLUS_TOKEN:
+        from_secret: pushplus_token
+    commands:
+      - |
+        STATUS="$${DRONE_STAGE_STATUS:-$${DRONE_BUILD_STATUS}}"
+        if [ "$${STATUS}" = "success" ]; then RESULT="成功"; else RESULT="失败"; fi
+        curl --fail --show-error --silent --request POST "https://www.pushplus.plus/send" \
+          --data-urlencode "token=$${PUSHPLUS_TOKEN}" \
+          --data-urlencode "title=Drone：$${DRONE_REPO_NAME} #$${DRONE_BUILD_NUMBER} $${RESULT}" \
+          --data-urlencode "content=<b>流水线：</b>$${DRONE_STAGE_NAME}<br><b>状态：</b>$${RESULT}<br><b>分支：</b>$${DRONE_COMMIT_BRANCH}<br><b>提交：</b>$${DRONE_COMMIT_SHA}<br><b>提交人：</b>$${DRONE_COMMIT_AUTHOR}<br><a href='$${DRONE_BUILD_LINK}'>打开 Drone 构建详情</a>" \
+          --data-urlencode "template=html" \
+          --data-urlencode "channel=wechat"
+    when:
+      status:
+        - success
+        - failure
+
 trigger:
   event:
     - push

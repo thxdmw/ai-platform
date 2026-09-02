@@ -69,7 +69,7 @@ SSH 用户身份运行；Linux 拒绝执行时，需要在服务器侧为这个�
 
 ## 自定义模型提供方
 
-左下角“设置”的“模型”页面可新增自定义提供方，填写 Provider ID、显示名称、API 地址、API 协议和 API 密钥。
+点击左下角用户资料区，在弹出菜单进入“模型设置”，可新增自定义提供方，填写 Provider ID、显示名称、API 地址、API 协议和 API 密钥。
 提供方与服务器无关，是全局配置，保存后所有服务器对话都可使用。支持
 `openai-completions`、`openai-responses`、`anthropic-messages` 三种配置协议；可以在保存前测试连接，并从
 提供方的 `/v1/models` 模型目录导入模型，也可以逐行手动添加。API 密钥使用与 SSH 凭据相同的
@@ -81,8 +81,14 @@ OpenAI Responses API 的工具调用适配，所以 `openai-responses` 目前只
 
 模型和推理等级放在消息输入框右下角，模型按“提供方 → 模型”级联选择，推理等级使用分段滑块并按对话保存；
 确认命令后的自动续跑会沿用同一选择。模型接口显式返回的
-`reasoning_content` 或 Anthropic thinking 内容会单独通过 SSE `reasoning` 事件发送，在页面“思考过程”中默认
-折叠展示。折叠状态下仍会显示实时字数、最新片段和活动标记；没有从接口返回的内部推理不会被伪造或展示。
+`reasoning_content`、常见兼容网关的 `thinking/reasoning_details`、Anthropic thinking 或显式 `<think>` 块会
+单独通过 SSE `reasoning` 事件发送，在页面“思考过程”中默认折叠展示并保留上下箭头。折叠状态下仍会显示实时
+字数、最新片段和活动标记；没有从接口返回的内部推理不会被伪造或展示。若请求了推理但提供方只返回正文，服务端
+会记录 `reasoningChars=0` 和一条 WARN 日志，便于检查模型能力与协议。
+
+以 OpenCode Go 为例，DeepSeek V4 Flash 使用 `openai-completions`，基础地址填写
+`https://opencode.ai/zen/go`（聊天路径保持 `/v1/chat/completions`），模型 ID 使用 `deepseek-v4-flash`。
+推理等级会作为 `reasoning_effort` 发送；只有上游实际返回独立 reasoning 时页面才显示思考折叠区。
 前端每 60ms 合并流式碎片再重绘，避免几个字符一次的 Markdown 全量渲染造成卡顿。只有用户停留在消息底部时
 页面才自动跟随输出；手动上滚会解除跟随并显示“回到最新消息”按钮。提问达到 6 条后，桌面宽屏右侧显示可跳转
 的本次提问目录。
