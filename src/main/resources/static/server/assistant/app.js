@@ -17,12 +17,15 @@
         serverList: document.querySelector('#serverList'), historyList: document.querySelector('#historyList'),
         chatContainer: document.querySelector('#chatContainer'), welcome: document.querySelector('#welcome'),
         messages: document.querySelector('#messages'), input: document.querySelector('#messageInput'),
+        messageOutline: document.querySelector('#messageOutline'),
+        scrollToBottom: document.querySelector('#scrollToBottomButton'),
         send: document.querySelector('#sendButton'), loginOverlay: document.querySelector('#loginOverlay'),
         loginForm: document.querySelector('#loginForm'), accessToken: document.querySelector('#accessToken'),
         loginError: document.querySelector('#loginError'), toast: document.querySelector('#toast'),
         serverSelectButton: document.querySelector('#serverSelectButton'), serverSelectLabel: document.querySelector('#serverSelectLabel'),
         serverSelectMenu: document.querySelector('#serverSelectMenu'), currentServerMeta: document.querySelector('#currentServerMeta'),
-        modelSelect: document.querySelector('#modelSelect'), reasoningSelect: document.querySelector('#reasoningSelect'),
+        providerSelect: document.querySelector('#providerSelect'), modelSelect: document.querySelector('#modelSelect'),
+        reasoningRange: document.querySelector('#reasoningRange'), reasoningValueLabel: document.querySelector('#reasoningValueLabel'),
         modelMenuButton: document.querySelector('#modelMenuButton'), modelMenu: document.querySelector('#modelMenu'),
         composerModelLabel: document.querySelector('#composerModelLabel'),
         composerReasoningLabel: document.querySelector('#composerReasoningLabel'),
@@ -31,8 +34,14 @@
         selectedConversationCount: document.querySelector('#selectedConversationCount'),
         deleteSelectedConversations: document.querySelector('#deleteSelectedConversations'),
         settingsOverlay: document.querySelector('#settingsOverlay'), settingsServerList: document.querySelector('#settingsServerList'),
+        globalSettingsOverlay: document.querySelector('#globalSettingsOverlay'),
         serverForm: document.querySelector('#serverForm'), commandSection: document.querySelector('#commandSection'),
         commandList: document.querySelector('#commandList'), commandForm: document.querySelector('#commandForm'),
+        commandSearch: document.querySelector('#commandSearch'), selectAllCommands: document.querySelector('#selectAllCommands'),
+        selectedCommandCount: document.querySelector('#selectedCommandCount'),
+        enableSelectedCommands: document.querySelector('#enableSelectedCommands'),
+        disableSelectedCommands: document.querySelector('#disableSelectedCommands'),
+        deleteSelectedCommands: document.querySelector('#deleteSelectedCommands'),
         modelProviderList: document.querySelector('#modelProviderList'),
         modelProviderForm: document.querySelector('#modelProviderForm')
     };
@@ -42,6 +51,7 @@
     let commands = [];
     let modelProviders = [];
     let modelOptions = [];
+    let modelProvidersLoaded = false;
     let editingModelProviderId = null;
     let editingServerId = null;
     let editingCommandId = null;
@@ -51,6 +61,12 @@
     let streaming = false;
     let managingConversations = false;
     const selectedConversationIds = new Set();
+    const selectedCommandIds = new Set();
+    const REASONING_LEVELS = ['auto', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+    const REASONING_LABELS = { auto: '自动', none: '关闭', minimal: '最小', low: '低', medium: '中', high: '高', xhigh: '超高', max: 'Max' };
+    const BOTTOM_FOLLOW_THRESHOLD = 120;
+    let followConversationTail = true;
+    let programmaticScroll = false;
     let toastTimer;
 
     if (window.marked) window.marked.setOptions({ gfm: true, breaks: true });
@@ -74,6 +90,8 @@
         document.querySelector('#logoutButton').addEventListener('click', logout);
         document.querySelector('#openSettingsButton').addEventListener('click', openSettings);
         document.querySelector('#closeSettingsButton').addEventListener('click', closeSettings);
+        document.querySelector('#globalSettingsButton').addEventListener('click', openGlobalSettings);
+        document.querySelector('#closeGlobalSettingsButton').addEventListener('click', closeGlobalSettings);
         document.querySelector('#addServerButton').addEventListener('click', () => editServer(null));
         document.querySelector('#installDefaultCommandsButton').addEventListener('click', installDefaultCommands);
         document.querySelector('#addCommandButton').addEventListener('click', () => editCommand(null));
@@ -87,27 +105,46 @@
         document.querySelector('#deleteServerButton').addEventListener('click', deleteServer);
         document.querySelector('#testServerButton').addEventListener('click', testServer);
         document.querySelector('#deleteCommandButton').addEventListener('click', deleteCommand);
+        elements.commandSearch.addEventListener('input', renderCommands);
+        elements.selectAllCommands.addEventListener('change', toggleAllCommands);
+        elements.enableSelectedCommands.addEventListener('click', () => bulkSetCommandsEnabled(true));
+        elements.disableSelectedCommands.addEventListener('click', () => bulkSetCommandsEnabled(false));
+        elements.deleteSelectedCommands.addEventListener('click', bulkDeleteCommands);
         document.querySelector('#serverAuthType').addEventListener('change', syncAuthenticationFields);
         elements.serverForm.addEventListener('submit', saveServer);
         elements.commandForm.addEventListener('submit', saveCommand);
         elements.modelProviderForm.addEventListener('submit', saveModelProvider);
         elements.serverSelectButton.addEventListener('click', toggleServerMenu);
         elements.modelMenuButton.addEventListener('click', toggleModelMenu);
+        elements.providerSelect.addEventListener('change', () => {
+            const providerId = elements.providerSelect.value;
+            const firstModel = modelOptions.find(model => model.providerId === providerId && model.apiProtocol !== 'openai-responses');
+            currentConversation().modelId = firstModel?.id || null;
+            currentConversation().updatedAt = Date.now();
+            persistConversations(); renderModelSelection();
+        });
         elements.modelSelect.addEventListener('change', () => {
             currentConversation().modelId = elements.modelSelect.value || null;
             currentConversation().updatedAt = Date.now();
             persistConversations(); renderModelSelection();
         });
-        elements.reasoningSelect.addEventListener('change', () => {
-            currentConversation().reasoningEffort = elements.reasoningSelect.value || 'auto';
+        elements.reasoningRange.addEventListener('input', () => {
+            currentConversation().reasoningEffort = REASONING_LEVELS[Number(elements.reasoningRange.value)] || 'auto';
             currentConversation().updatedAt = Date.now();
             persistConversations(); renderModelSelection();
         });
+        elements.messages.addEventListener('scroll', handleConversationScroll, { passive: true });
+        elements.scrollToBottom.addEventListener('click', () => scrollConversationToBottom(true));
         document.addEventListener('click', event => {
             if (!event.target.closest('.server-picker')) closeServerMenu();
             if (!event.target.closest('.composer-model-picker')) closeModelMenu();
         });
-        document.addEventListener('keydown', event => { if (event.key === 'Escape') { closeServerMenu(); closeModelMenu(); } });
+        document.addEventListener('keydown', event => {
+            if (event.key !== 'Escape') return;
+            closeServerMenu(); closeModelMenu();
+            if (!elements.globalSettingsOverlay.hidden) closeGlobalSettings();
+            else if (!elements.settingsOverlay.hidden) closeSettings();
+        });
         elements.sidebarOverlay.addEventListener('click', closeMobileSidebar);
         document.querySelectorAll('[data-question]').forEach(button => button.addEventListener('click', () => {
             elements.input.value = button.dataset.question || '';
@@ -177,6 +214,7 @@
         modelProviders = await api('/api/server/v1/model-providers');
         modelOptions = modelProviders.flatMap(provider => provider.enabled
             ? provider.models.filter(model => model.enabled) : []);
+        modelProvidersLoaded = true;
         renderModelProviders();
         renderModelSelection();
     }
@@ -184,22 +222,31 @@
     function renderModelSelection() {
         const selected = currentConversation()?.modelId || '';
         const reasoning = currentConversation()?.reasoningEffort || 'auto';
-        elements.modelSelect.replaceChildren(new Option('系统默认模型', ''));
-        modelOptions.forEach(model => {
-            const unsupported = model.apiProtocol === 'openai-responses';
-            const option = new Option(`${model.providerName} / ${model.name}${unsupported ? '（当前版本仅支持测试与模型目录）' : ''}`, model.id);
-            option.disabled = unsupported; elements.modelSelect.appendChild(option);
-        });
-        if (selected && modelOptions.some(model => model.id === selected && model.apiProtocol !== 'openai-responses')) elements.modelSelect.value = selected;
-        else if (selected) {
+        const selectedModel = modelOptions.find(model => model.id === selected && model.apiProtocol !== 'openai-responses');
+        if (selected && !selectedModel && modelProvidersLoaded) {
             currentConversation().modelId = null;
             persistConversations();
         }
-        elements.reasoningSelect.value = [...elements.reasoningSelect.options].some(option => option.value === reasoning)
-            ? reasoning : 'auto';
+        const providerId = selectedModel?.providerId || '';
+        elements.providerSelect.replaceChildren(new Option('系统默认', ''));
+        modelProviders.filter(provider => provider.enabled && provider.models.some(model => model.enabled))
+            .forEach(provider => elements.providerSelect.appendChild(new Option(provider.name, provider.id)));
+        elements.providerSelect.value = providerId;
+        elements.modelSelect.replaceChildren(new Option(providerId ? '请选择模型' : '系统默认模型', ''));
+        modelOptions.filter(model => model.providerId === providerId).forEach(model => {
+            const unsupported = model.apiProtocol === 'openai-responses';
+            const option = new Option(`${model.name}${unsupported ? '（仅支持测试与模型目录）' : ''}`, model.id);
+            option.disabled = unsupported; elements.modelSelect.appendChild(option);
+        });
+        elements.modelSelect.value = selectedModel?.id || '';
+        elements.modelSelect.disabled = streaming || !providerId;
+        const reasoningIndex = Math.max(0, REASONING_LEVELS.indexOf(reasoning));
+        elements.reasoningRange.value = String(reasoningIndex);
+        elements.reasoningRange.style.setProperty('--reasoning-progress', `${reasoningIndex / (REASONING_LEVELS.length - 1) * 100}%`);
+        elements.reasoningValueLabel.textContent = REASONING_LABELS[REASONING_LEVELS[reasoningIndex]];
         const model = modelOptions.find(value => value.id === elements.modelSelect.value);
-        elements.composerModelLabel.textContent = model ? model.name : '系统默认模型';
-        elements.composerReasoningLabel.textContent = elements.reasoningSelect.selectedOptions[0]?.textContent || '自动';
+        elements.composerModelLabel.textContent = model ? `${model.providerName} / ${model.name}` : '系统默认模型';
+        elements.composerReasoningLabel.textContent = REASONING_LABELS[REASONING_LEVELS[reasoningIndex]];
     }
 
     function renderModelProviders() {
@@ -210,13 +257,15 @@
             elements.modelProviderList.appendChild(empty); return;
         }
         modelProviders.forEach(provider => {
-            const item = document.createElement('button'); item.type = 'button'; item.className = 'command-item';
-            const main = document.createElement('span'); main.className = 'command-item-main';
-            const name = document.createElement('strong'); name.textContent = provider.name + (provider.enabled ? '' : '（停用）');
-            const description = document.createElement('span');
+            const item = document.createElement('button'); item.type = 'button'; item.className = 'provider-item';
+            const main = document.createElement('span'); main.className = 'provider-item-main';
+            const name = document.createElement('strong');
+            const status = document.createElement('i'); status.className = provider.enabled ? 'online' : '';
+            name.append(document.createTextNode(provider.name), status);
+            const description = document.createElement('small');
             description.textContent = `${provider.providerKey} · ${provider.baseUrl} · ${provider.models.length} 个模型`;
             main.append(name, description);
-            const badge = document.createElement('span'); badge.className = 'risk-badge'; badge.textContent = provider.apiProtocol;
+            const badge = document.createElement('span'); badge.className = 'provider-edit-label'; badge.textContent = '编辑';
             item.append(main, badge); item.addEventListener('click', () => editModelProvider(provider.id));
             elements.modelProviderList.appendChild(item);
         });
@@ -314,10 +363,20 @@
         } catch (error) { field('modelProviderFormError').textContent = error.message; }
     }
 
-    // 打开设置时默认选中「当前对话的服务器」；没有服务器时进入新增表单。
+    async function openGlobalSettings() {
+        elements.globalSettingsOverlay.hidden = false;
+        await loadModelProviders();
+        document.querySelector('.global-settings-main').scrollTop = 0;
+    }
+
+    function closeGlobalSettings() {
+        elements.globalSettingsOverlay.hidden = true;
+        elements.modelProviderForm.hidden = true;
+    }
+
+    // 打开服务器配置时默认选中「当前对话的服务器」；没有服务器时进入新增表单。
     async function openSettings() {
         elements.settingsOverlay.hidden = false;
-        await loadModelProviders();
         renderSettingsServerList();
         const candidate = editingServerId || currentConversation().serverId;
         const preferred = servers.some(server => server.id === candidate) ? candidate : (servers[0]?.id || null);
@@ -382,6 +441,8 @@
         field('serverCredential').placeholder = privateKey
             ? '粘贴 PEM/OpenSSH 私钥；编辑时留空表示不修改' : '编辑时留空表示不修改';
         field('passphraseField').hidden = !privateKey;
+        field('passwordCredentialGuide').hidden = privateKey;
+        field('privateKeyCredentialGuide').hidden = !privateKey;
     }
 
     async function saveServer(event) {
@@ -423,8 +484,13 @@
         finally { button.disabled = false; }
     }
 
-    async function loadCommands(serverId) {
-        commands = await api(`/api/server/v1/servers/${serverId}/commands`); renderCommands();
+    async function loadCommands(serverId, resetView = true) {
+        commands = await api(`/api/server/v1/servers/${serverId}/commands`);
+        if (resetView) {
+            selectedCommandIds.clear();
+            elements.commandSearch.value = '';
+        }
+        renderCommands();
     }
 
     async function installDefaultCommands() {
@@ -443,22 +509,106 @@
 
     function renderCommands() {
         elements.commandList.replaceChildren();
-        if (!commands.length) {
+        const keyword = elements.commandSearch.value.trim().toLowerCase();
+        const visibleCommands = commands.filter(command => !keyword || [command.name, command.description, command.commandText]
+            .some(value => String(value || '').toLowerCase().includes(keyword)));
+        if (!visibleCommands.length) {
             const empty = document.createElement('p'); empty.className = 'empty-note';
-            empty.textContent = editingServerId ? '尚未配置命令，可一键补充常用只读命令。' : '请先保存服务器';
-            elements.commandList.appendChild(empty); return;
+            empty.textContent = keyword ? '没有匹配的固定命令。'
+                : (editingServerId ? '尚未配置命令，可一键补充常用只读命令。' : '请先保存服务器');
+            elements.commandList.appendChild(empty); syncCommandSelectionControls(visibleCommands); return;
         }
-        commands.forEach(command => {
-            const item = document.createElement('button'); item.type = 'button'; item.className = 'command-item';
-            const main = document.createElement('span'); main.className = 'command-item-main';
-            const name = document.createElement('strong'); name.textContent = command.name + (command.enabled ? '' : '（停用）');
+        visibleCommands.forEach(command => {
+            const item = document.createElement('div'); item.className = 'command-item' + (command.enabled ? '' : ' disabled');
+            const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.className = 'command-select';
+            checkbox.checked = selectedCommandIds.has(command.id); checkbox.setAttribute('aria-label', `选择命令：${command.name}`);
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) selectedCommandIds.add(command.id); else selectedCommandIds.delete(command.id);
+                renderCommands();
+            });
+            const main = document.createElement('button'); main.type = 'button'; main.className = 'command-item-main';
+            const name = document.createElement('strong'); name.textContent = command.name;
             const description = document.createElement('span'); description.textContent = command.description;
-            main.append(name, description);
+            main.append(name, description); main.addEventListener('click', () => editCommand(command.id));
             const risk = document.createElement('span'); risk.className = 'risk-badge' + (command.riskLevel === 'DANGEROUS' ? ' dangerous' : '');
             risk.textContent = command.riskLevel === 'DANGEROUS' ? '需要确认' : '直接执行';
-            item.append(main, risk); item.addEventListener('click', () => editCommand(command.id));
+            const visibility = document.createElement('span'); visibility.className = 'command-visibility' + (command.enabled ? ' enabled' : '');
+            visibility.textContent = command.enabled ? '助手可见' : '助手不可见';
+            const toggleLabel = document.createElement('label'); toggleLabel.className = 'command-switch';
+            const toggle = document.createElement('input'); toggle.type = 'checkbox'; toggle.checked = command.enabled;
+            toggle.setAttribute('aria-label', `${command.enabled ? '停用' : '启用'}命令：${command.name}`);
+            const slider = document.createElement('span'); toggleLabel.append(toggle, slider);
+            toggle.addEventListener('change', () => setCommandEnabled(command, toggle.checked, toggle));
+            const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'command-delete';
+            remove.textContent = '×'; remove.setAttribute('aria-label', `删除命令：${command.name}`);
+            remove.addEventListener('click', () => deleteCommandRecord(command));
+            item.append(checkbox, main, risk, visibility, toggleLabel, remove);
             elements.commandList.appendChild(item);
         });
+        syncCommandSelectionControls(visibleCommands);
+    }
+
+    function commandPayload(command, enabled = command.enabled) {
+        return { name: command.name, description: command.description, commandText: command.commandText,
+            riskLevel: command.riskLevel, parameterSchema: command.parameterSchema || '[]',
+            sortOrder: Number(command.sortOrder || 0), enabled };
+    }
+
+    async function setCommandEnabled(command, enabled, control) {
+        control.disabled = true;
+        try {
+            await api(`/api/server/v1/commands/${command.id}`, { method: 'PUT', body: JSON.stringify(commandPayload(command, enabled)) });
+            await loadCommands(editingServerId, false);
+            showToast(enabled ? '已启用，助手现在可以看到该命令' : '已停用，助手将不再看到该命令');
+        } catch (error) { control.checked = !enabled; handleApiError(error); }
+        finally { control.disabled = false; }
+    }
+
+    function toggleAllCommands() {
+        const keyword = elements.commandSearch.value.trim().toLowerCase();
+        const visible = commands.filter(command => !keyword || [command.name, command.description, command.commandText]
+            .some(value => String(value || '').toLowerCase().includes(keyword)));
+        visible.forEach(command => {
+            if (elements.selectAllCommands.checked) selectedCommandIds.add(command.id); else selectedCommandIds.delete(command.id);
+        });
+        renderCommands();
+    }
+
+    function syncCommandSelectionControls(visibleCommands = commands) {
+        const validIds = new Set(commands.map(command => command.id));
+        [...selectedCommandIds].forEach(id => { if (!validIds.has(id)) selectedCommandIds.delete(id); });
+        const selectedCount = selectedCommandIds.size;
+        elements.selectedCommandCount.textContent = `已选 ${selectedCount} 项`;
+        [elements.enableSelectedCommands, elements.disableSelectedCommands, elements.deleteSelectedCommands]
+            .forEach(button => { button.disabled = selectedCount === 0; });
+        const visibleSelected = visibleCommands.filter(command => selectedCommandIds.has(command.id)).length;
+        elements.selectAllCommands.checked = visibleCommands.length > 0 && visibleSelected === visibleCommands.length;
+        elements.selectAllCommands.indeterminate = visibleSelected > 0 && visibleSelected < visibleCommands.length;
+    }
+
+    async function bulkSetCommandsEnabled(enabled) {
+        const selected = commands.filter(command => selectedCommandIds.has(command.id) && command.enabled !== enabled);
+        if (!selected.length) { showToast(enabled ? '所选命令都已启用' : '所选命令都已停用'); return; }
+        const buttons = [elements.enableSelectedCommands, elements.disableSelectedCommands, elements.deleteSelectedCommands];
+        buttons.forEach(button => { button.disabled = true; });
+        try {
+            await Promise.all(selected.map(command => api(`/api/server/v1/commands/${command.id}`, {
+                method: 'PUT', body: JSON.stringify(commandPayload(command, enabled))
+            })));
+            selectedCommandIds.clear();
+            await loadCommands(editingServerId, false); showToast(`已${enabled ? '启用' : '停用'} ${selected.length} 个命令`);
+        } catch (error) { handleApiError(error); renderCommands(); }
+    }
+
+    async function bulkDeleteCommands() {
+        const selected = commands.filter(command => selectedCommandIds.has(command.id));
+        if (!selected.length || !window.confirm(`确定删除选中的 ${selected.length} 个固定命令吗？`)) return;
+        try {
+            await Promise.all(selected.map(command => api(`/api/server/v1/commands/${command.id}`, { method: 'DELETE' })));
+            selectedCommandIds.clear();
+            await loadCommands(editingServerId, false); elements.commandForm.hidden = true;
+            showToast(`已删除 ${selected.length} 个命令`);
+        } catch (error) { handleApiError(error); await loadCommands(editingServerId, false); }
     }
 
     function editCommand(commandId) {
@@ -497,10 +647,15 @@
 
     async function deleteCommand() {
         const command = commands.find(value => value.id === editingCommandId);
-        if (!command || !window.confirm(`确定删除命令“${command.name}”吗？`)) return;
+        if (command) await deleteCommandRecord(command);
+    }
+
+    async function deleteCommandRecord(command) {
+        if (!window.confirm(`确定删除命令“${command.name}”吗？`)) return;
         try {
             await api(`/api/server/v1/commands/${command.id}`, { method: 'DELETE' });
-            await loadCommands(editingServerId); elements.commandForm.hidden = true; showToast('命令已删除');
+            selectedCommandIds.delete(command.id);
+            await loadCommands(editingServerId, false); elements.commandForm.hidden = true; showToast('命令已删除');
         } catch (error) { field('commandFormError').textContent = error.message; }
     }
 
@@ -522,14 +677,15 @@
         // 把待确认的操作/提议置为「已失效」：服务端在生成新动作时会作废同一对话的旧动作，
         // 前端同步状态，避免用户点击一个服务端已不认的按钮。
         expireActions(conversation);
-        conversation.messages.push({ role: 'user', content: text });
+        conversation.messages.push({ id: crypto.randomUUID(), role: 'user', content: text });
         if (conversation.messages.filter(message => message.role === 'user').length === 1) {
             conversation.title = text.length > 24 ? text.slice(0, 24) + '…' : text;
         }
-        const assistantMessage = { role: 'assistant', content: '', streaming: true };
+        const assistantMessage = { id: crypto.randomUUID(), role: 'assistant', content: '', streaming: true };
         conversation.messages.push(assistantMessage);
         conversation.messages = conversation.messages.slice(-MAX_MESSAGES);
         conversation.updatedAt = Date.now(); elements.input.value = ''; resizeComposer();
+        followConversationTail = true;
         streaming = true; updateStreamingState(); renderAll();
         try {
             const response = await fetch('/api/server/v1/messages', {
@@ -610,8 +766,9 @@
         const confirm = /^(执行|确认|确认执行|继续执行|同意|添加|确认添加)$/.test(compact);
         const cancel = /^(取消|不执行|取消执行|不添加|取消添加)$/.test(compact);
         if (!confirm && !cancel && !temporary) return false;
-        conversation.messages.push({ role: 'user', content: text });
+        conversation.messages.push({ id: crypto.randomUUID(), role: 'user', content: text });
         conversation.updatedAt = Date.now(); elements.input.value = ''; resizeComposer();
+        followConversationTail = true;
         persistConversations(); renderAll();
         if (temporary && !confirm && !cancel) {
             await decideTemporaryOperation(message, 'REJECT_WITH_FEEDBACK', text);
@@ -646,6 +803,7 @@
             const next = createConversation(server.id); conversations.unshift(next); currentConversationId = next.id;
             conversations = conversations.slice(0, MAX_CONVERSATIONS); showToast(`已新建与“${server.name}”的对话`);
         } else conversation.serverId = server.id;
+        followConversationTail = true;
         persistConversations(); renderAll(); closeMobileSidebar();
     }
 
@@ -730,24 +888,42 @@
             const title = document.createElement('span'); title.className = 'history-title'; title.textContent = conversation.title;
             const activate = () => {
                 if (managingConversations) return toggleConversationSelection(conversation.id);
-                if (!streaming) { currentConversationId = conversation.id; renderAll(); closeMobileSidebar(); }
+                if (!streaming) { currentConversationId = conversation.id; followConversationTail = true; renderAll(); closeMobileSidebar(); }
             };
             row.addEventListener('click', activate); row.addEventListener('keydown', event => { if (event.key === 'Enter') activate(); });
-            row.appendChild(title); elements.historyList.appendChild(row);
+            row.appendChild(title);
+            if (!managingConversations) {
+                const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'history-delete';
+                remove.textContent = '×'; remove.setAttribute('aria-label', `删除对话：${conversation.title}`);
+                remove.addEventListener('click', event => { event.stopPropagation(); deleteConversation(conversation); });
+                row.appendChild(remove);
+            }
+            elements.historyList.appendChild(row);
         });
         syncConversationSelectionControls();
     }
 
     function renderMessages() {
         const conversation = currentConversation(); const hasMessages = conversation.messages.length > 0;
+        const preservedScrollTop = elements.messages.scrollTop;
+        // replaceChildren 会立刻触发一次 scroll；必须在改 DOM 前进入程序化滚动状态，
+        // 否则流式重绘会把“仍在底部”误判成用户主动上滚。
+        programmaticScroll = true;
         elements.chatContainer.classList.toggle('centered', !hasMessages); elements.welcome.hidden = hasMessages;
         elements.messages.replaceChildren();
         conversation.messages.forEach(message => elements.messages.appendChild(renderMessage(message)));
-        requestAnimationFrame(() => { elements.messages.scrollTop = elements.messages.scrollHeight; });
+        renderMessageOutline(conversation);
+        requestAnimationFrame(() => {
+            elements.messages.scrollTop = followConversationTail ? elements.messages.scrollHeight : preservedScrollTop;
+            updateScrollControls();
+            requestAnimationFrame(() => { programmaticScroll = false; });
+        });
     }
 
     function renderMessage(message) {
         const row = document.createElement('article'); row.className = `message ${message.role}`;
+        message.id ||= crypto.randomUUID();
+        row.id = `message-${message.id}`;
         const stack = document.createElement('div'); stack.className = 'message-stack';
         const content = document.createElement('div'); content.className = 'message-content';
         if (message.role === 'assistant') {
@@ -764,11 +940,76 @@
 
     function renderReasoning(message) {
         const details = document.createElement('details'); details.className = 'reasoning-panel';
+        details.open = Boolean(message.reasoningOpen);
+        details.addEventListener('toggle', () => { message.reasoningOpen = details.open; });
         const summary = document.createElement('summary');
-        summary.textContent = message.streaming ? '正在思考…' : '思考过程';
+        const label = document.createElement('span'); label.className = 'reasoning-summary-label';
+        label.textContent = message.streaming ? '正在思考' : '思考过程';
+        const count = document.createElement('span'); count.className = 'reasoning-summary-count';
+        count.textContent = `${message.reasoning.length} 字`;
+        summary.append(label, count);
+        if (message.streaming) {
+            const preview = document.createElement('span'); preview.className = 'reasoning-summary-preview';
+            const compact = message.reasoning.replace(/\s+/g, ' ').trim();
+            preview.textContent = compact ? `· ${compact.slice(-34)}` : '';
+            const pulse = document.createElement('span'); pulse.className = 'reasoning-live-pulse'; pulse.setAttribute('aria-hidden', 'true');
+            summary.append(preview, pulse);
+        }
         const body = document.createElement('div'); body.className = 'reasoning-content markdown-body';
         body.innerHTML = renderMarkdown(message.reasoning); decorateCodeBlocks(body);
         details.append(summary, body); return details;
+    }
+
+    function renderMessageOutline(conversation) {
+        const questions = conversation.messages.filter(message => message.role === 'user');
+        elements.messageOutline.hidden = questions.length < 6;
+        elements.messageOutline.replaceChildren();
+        if (questions.length < 6) return;
+        const heading = document.createElement('strong'); heading.textContent = '本次提问';
+        elements.messageOutline.appendChild(heading);
+        questions.forEach((message, index) => {
+            message.id ||= crypto.randomUUID();
+            const button = document.createElement('button'); button.type = 'button';
+            button.dataset.messageId = message.id; button.title = message.content;
+            button.textContent = `${index + 1}. ${message.content.replace(/\s+/g, ' ').slice(0, 26)}`;
+            button.addEventListener('click', () => {
+                followConversationTail = false;
+                document.querySelector(`#message-${message.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                updateScrollControls();
+            });
+            elements.messageOutline.appendChild(button);
+        });
+        updateOutlineHighlight();
+    }
+
+    function handleConversationScroll() {
+        if (!programmaticScroll) {
+            const distance = elements.messages.scrollHeight - elements.messages.scrollTop - elements.messages.clientHeight;
+            followConversationTail = distance <= BOTTOM_FOLLOW_THRESHOLD;
+        }
+        updateScrollControls();
+        updateOutlineHighlight();
+    }
+
+    function updateScrollControls() {
+        const distance = elements.messages.scrollHeight - elements.messages.scrollTop - elements.messages.clientHeight;
+        elements.scrollToBottom.hidden = !currentConversation().messages.length || distance <= BOTTOM_FOLLOW_THRESHOLD;
+    }
+
+    function scrollConversationToBottom(smooth = false) {
+        followConversationTail = true;
+        elements.messages.scrollTo({ top: elements.messages.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+        updateScrollControls();
+    }
+
+    function updateOutlineHighlight() {
+        if (elements.messageOutline.hidden) return;
+        const messageRows = [...elements.messages.querySelectorAll('.message.user')];
+        const viewportTop = elements.messages.getBoundingClientRect().top + 50;
+        let activeId = messageRows[0]?.id?.replace('message-', '') || '';
+        messageRows.forEach(row => { if (row.getBoundingClientRect().top <= viewportTop) activeId = row.id.replace('message-', ''); });
+        elements.messageOutline.querySelectorAll('button').forEach(button =>
+            button.classList.toggle('active', button.dataset.messageId === activeId));
     }
 
     function renderCopy(message) {
@@ -1038,6 +1279,7 @@
     function newConversation() {
         if (streaming) return; const conversation = createConversation(currentConversation()?.serverId || servers.find(server => server.enabled)?.id || null); conversations.unshift(conversation);
         conversations = conversations.slice(0, MAX_CONVERSATIONS); currentConversationId = conversation.id;
+        followConversationTail = true;
         persistConversations(); renderAll(); closeMobileSidebar(); elements.input.focus();
     }
 
@@ -1072,7 +1314,7 @@
 
     // 批量删除本地会话时，必须同步清理服务端状态（模型记忆、会话-服务器绑定、待确认操作/提议），
         // 否则服务端会残留孤儿状态。逐个调 DELETE /conversations/{id}，部分失败时保留本地记录并提示重试。
-        async function deleteSelectedConversations() {
+    async function deleteSelectedConversations() {
         if (streaming || !selectedConversationIds.size) return;
         const count = selectedConversationIds.size;
         if (!window.confirm(`确定删除选中的 ${count} 个本地对话吗？此操作无法撤销。`)) return;
@@ -1099,6 +1341,18 @@
             : `已同步删除 ${deletedIds.size} 个对话`);
     }
 
+    async function deleteConversation(conversation) {
+        if (streaming || !window.confirm(`确定删除对话“${conversation.title}”吗？`)) return;
+        try {
+            await api(`/api/server/v1/conversations/${encodeURIComponent(conversation.id)}`, { method: 'DELETE' });
+            const deletingCurrent = conversation.id === currentConversationId;
+            conversations = conversations.filter(value => value.id !== conversation.id);
+            if (!conversations.length) conversations.push(createConversation(conversation.serverId || servers.find(server => server.enabled)?.id || null));
+            if (deletingCurrent) { currentConversationId = conversations[0].id; followConversationTail = true; }
+            persistConversations(); renderAll(); showToast('对话已删除');
+        } catch (error) { handleApiError(error); }
+    }
+
     function createConversation(serverId = null) { return { id: crypto.randomUUID(), serverId, modelId: null, reasoningEffort: 'auto', title: '新对话', messages: [], updatedAt: Date.now() }; }
     function currentConversation() { return conversations.find(value => value.id === currentConversationId) || conversations[0]; }
     // 新消息发出后，把该会话待确认的动作全部置为已失效——
@@ -1106,7 +1360,15 @@
         function expireActions(conversation) { conversation.messages.forEach(message => {
         if (['PENDING_APPROVAL', 'PENDING_COMMAND_APPROVAL'].includes(message.action?.status)) message.action.status = 'SUPERSEDED';
     }); }
-    function loadConversations() { try { const value = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY)); return Array.isArray(value) ? value.slice(0, MAX_CONVERSATIONS).map(conversation => ({ reasoningEffort: 'auto', ...conversation })) : []; } catch (_) { return []; } }
+    function loadConversations() {
+        try {
+            const value = JSON.parse(localStorage.getItem(CONVERSATIONS_KEY));
+            return Array.isArray(value) ? value.slice(0, MAX_CONVERSATIONS).map(conversation => ({
+                reasoningEffort: 'auto', ...conversation,
+                messages: Array.isArray(conversation.messages) ? conversation.messages.map(message => ({ id: message.id || crypto.randomUUID(), ...message })) : []
+            })) : [];
+        } catch (_) { return []; }
+    }
     function persistConversations() { localStorage.setItem(CONVERSATIONS_KEY, JSON.stringify(conversations.slice(0, MAX_CONVERSATIONS))); }
 
     async function api(url, options = {}) {
@@ -1126,8 +1388,9 @@
         elements.input.disabled = streaming || !ready; elements.send.disabled = streaming || !ready;
         elements.input.placeholder = ready ? '向服务器助手提问' : '请先选择或配置服务器';
         elements.serverSelectButton.disabled = streaming;
-        elements.modelSelect.disabled = streaming;
-        elements.reasoningSelect.disabled = streaming; elements.modelMenuButton.disabled = streaming;
+        elements.providerSelect.disabled = streaming;
+        elements.modelSelect.disabled = streaming || !elements.providerSelect.value;
+        elements.reasoningRange.disabled = streaming; elements.modelMenuButton.disabled = streaming;
         if (streaming) { closeServerMenu(); closeModelMenu(); }
     }
     function resizeComposer() { elements.input.style.height = 'auto'; elements.input.style.height = `${Math.min(elements.input.scrollHeight, 200)}px`; }
