@@ -21,6 +21,68 @@
     const configuredTitle = loaderScript.dataset.title?.trim();
     const hostStyleId = 'thx-website-assistant-host-style';
 
+    // 回答渲染库与博客/服务器助手同版本，从 jsdelivr 加载；首页若用 CSP 限制外部脚本，
+    // 组件会退化为转义纯文本（见 renderMarkdown），不会放行模型返回的原始 HTML。
+    const MARKED_URL = 'https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js';
+    const DOMPURIFY_URL = 'https://cdn.jsdelivr.net/npm/dompurify@3.2.6/dist/purify.min.js';
+
+    function loadExternalScript(url) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = url;
+            script.async = true;
+            script.onload = resolve;
+            script.onerror = () => reject(new Error(`脚本加载失败：${url}`));
+            document.head.appendChild(script);
+        });
+    }
+
+    // 全局只加载一次，组件实例共享；成功后才开启 markdown 渲染并重绘已显示的消息。
+    const markdownLibraries = Promise.all([loadExternalScript(MARKED_URL), loadExternalScript(DOMPURIFY_URL)])
+        .then(() => {
+            if (window.marked) window.marked.setOptions({gfm: true, breaks: true});
+        })
+        .catch(error => {
+            console.warn('网站助手 markdown 渲染库加载失败，回答将以纯文本显示', error);
+        });
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, character => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'})[character]);
+    }
+
+    // 模型返回可能含任意 HTML，必须先过 DOMPurify 再进 innerHTML；
+    // marked 不可用（CDN 失败或尚未就绪）时退化为转义纯文本，宁可没有排版也不能放行原始 HTML。
+    function renderMarkdown(source) {
+        if (!window.marked || !window.DOMPurify) return escapeHtml(source).replace(/\n/g, '<br>');
+        return window.DOMPurify.sanitize(window.marked.parse(source), {USE_PROFILES: {html: true}});
+    }
+
+    // 外部链接强制新窗口打开并加 noopener；代码块补一个复制按钮（复制内容不经过 innerHTML）。
+    function decorateCodeBlocks(root) {
+        root.querySelectorAll('a').forEach(link => {
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+        });
+        root.querySelectorAll('pre').forEach(block => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'thx-ai-code-copy';
+            button.textContent = '复制代码';
+            button.addEventListener('click', () => copyCode(block.querySelector('code')?.textContent || block.textContent, button));
+            block.appendChild(button);
+        });
+    }
+
+    async function copyCode(text, button) {
+        try {
+            await navigator.clipboard.writeText(text);
+            button.textContent = '已复制';
+        } catch (_) {
+            button.textContent = '复制失败';
+        }
+        setTimeout(() => { button.textContent = '复制代码'; }, 1400);
+    }
+
     // 网站助手前端组件：聊天记录和会话编号保存在 localStorage，刷新页面可继续同一会话；
     // 模型记忆也按 conversationId 挂在服务端，因此「新建会话」必须同时换编号并清空本地记录。
     class WebsiteAssistantElement extends HTMLElement {
@@ -45,6 +107,10 @@
             this.syncTheme();
             this.installHostLayoutStyle();
             this.loadPublicConfiguration();
+            // 渲染库就绪时重绘一次，把库加载完成前已显示的纯文本回答补成排版。
+            markdownLibraries.then(() => {
+                if (this.isConnected) this.renderMessages();
+            });
             // 首页可能在运行中切换主题（data-theme/class），跟随宿主页面而不是固定一种外观。
             this.themeObserver = new MutationObserver(() => this.syncTheme());
             this.themeObserver.observe(document.documentElement, {
@@ -323,10 +389,19 @@
             element.className = `thx-ai-message thx-ai-message-${message.role}`;
             if (!message.content && this.pending && message === this.messages[this.messages.length - 1]) {
                 this.renderThinkingState(element);
+            } else if (message.role === 'assistant') {
+                this.renderMessageContent(element, message.content);
             } else {
                 element.textContent = message.content;
             }
             return element;
+        }
+
+        // 助手回答统一走 markdown 渲染，直接在气泡元素上渲染，排版样式见 widget.css 的
+        // .thx-ai-message-assistant 系列规则；渲染前必须消毒，模型返回的 HTML 不能直接进页面。
+        renderMessageContent(element, content) {
+            element.innerHTML = renderMarkdown(content);
+            decorateCodeBlocks(element);
         }
 
         updateLastAssistantMessage(content) {
@@ -334,7 +409,7 @@
             const last = elements[elements.length - 1];
             if (last && content) {
                 last.classList.remove('thx-ai-thinking');
-                last.textContent = content;
+                this.renderMessageContent(last, content);
             } else if (last && this.pending) {
                 this.renderThinkingState(last);
             }

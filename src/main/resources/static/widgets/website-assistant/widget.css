@@ -59,7 +59,30 @@
 .thx-ai-empty p { max-width: 285px; margin: 9px 0 0; font-size: 12px; line-height: 1.75; }
 .thx-ai-message { max-width: 86%; padding: 11px 14px; border-radius: 16px; font-size: 13px; line-height: 1.68; overflow-wrap: anywhere; white-space: pre-wrap; }
 .thx-ai-message-user { align-self: flex-end; border-bottom-right-radius: 5px; color: #fff; background: linear-gradient(135deg,#2d77e6,#2453c7); box-shadow: 0 5px 14px rgba(37,99,235,.12); }
-.thx-ai-message-assistant { align-self: flex-start; border: 1px solid var(--thx-ai-border); border-bottom-left-radius: 5px; color: var(--thx-ai-text); background: var(--thx-ai-surface-soft); }
+/* 助手回答按 markdown 排版，换行交给 marked 的 breaks 处理，不能保留 pre-wrap（否则空行会翻倍）。 */
+.thx-ai-message-assistant { align-self: flex-start; border: 1px solid var(--thx-ai-border); border-bottom-left-radius: 5px; color: var(--thx-ai-text); background: var(--thx-ai-surface-soft); white-space: normal; }
+
+/* markdown 排版：与博客/服务器助手一致，颜色走组件变量以适配深浅主题。 */
+.thx-ai-message-assistant p { margin: 0 0 10px; }
+.thx-ai-message-assistant p:last-child { margin-bottom: 0; }
+.thx-ai-message-assistant ul, .thx-ai-message-assistant ol { margin: 0 0 10px; padding-left: 22px; }
+.thx-ai-message-assistant li { margin: 3px 0; }
+.thx-ai-message-assistant h1, .thx-ai-message-assistant h2, .thx-ai-message-assistant h3, .thx-ai-message-assistant h4 { margin: 16px 0 8px; line-height: 1.35; font-weight: 700; }
+.thx-ai-message-assistant h1 { font-size: 17px; }
+.thx-ai-message-assistant h2 { font-size: 15px; }
+.thx-ai-message-assistant h3, .thx-ai-message-assistant h4 { font-size: 13.5px; }
+.thx-ai-message-assistant code:not(pre code) { padding: 2px 5px; border-radius: 5px; background: color-mix(in srgb, var(--thx-ai-muted) 16%, transparent); font-family: Consolas, monospace; font-size: .88em; }
+.thx-ai-message-assistant pre { position: relative; max-width: 100%; margin: 10px 0; padding: 36px 12px 12px; border-radius: 10px; color: #f3f3f3; background: #171717; overflow-x: auto; white-space: pre; }
+.thx-ai-message-assistant pre code { padding: 0; background: transparent; font-family: Consolas, monospace; font-size: 11.5px; line-height: 1.55; white-space: pre; }
+.thx-ai-code-copy { position: absolute; top: 7px; right: 7px; padding: 4px 7px; border: 0; border-radius: 6px; color: #d8d8d8; background: #333; cursor: pointer; font-size: 10px; }
+.thx-ai-code-copy:hover { color: #fff; background: #444; }
+.thx-ai-message-assistant table { display: block; width: 100%; margin: 10px 0; border-collapse: collapse; overflow-x: auto; }
+.thx-ai-message-assistant th, .thx-ai-message-assistant td { min-width: 72px; padding: 6px 9px; border: 1px solid var(--thx-ai-border); text-align: left; font-size: 12px; }
+.thx-ai-message-assistant th { background: color-mix(in srgb, var(--thx-ai-muted) 12%, transparent); font-weight: 600; }
+.thx-ai-message-assistant blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid var(--thx-ai-border); color: var(--thx-ai-muted); }
+.thx-ai-message-assistant a { color: var(--thx-ai-primary); }
+.thx-ai-message-assistant img { max-width: 100%; border-radius: 8px; }
+.thx-ai-message-assistant hr { margin: 12px 0; border: 0; border-top: 1px solid var(--thx-ai-border); }
 .thx-ai-thinking { display: inline-flex; align-items: center; gap: 8px; color: var(--thx-ai-muted); }
 .thx-ai-thinking-dots { display: inline-flex; align-items: center; gap: 3px; }
 .thx-ai-thinking-dots i { width: 4px; height: 4px; border-radius: 50%; background: currentColor; animation: thx-ai-thinking .9s ease-in-out infinite; }
