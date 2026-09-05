@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.thx.aiplatform.server.model.ServerCommandDefinition;
+import com.thx.aiplatform.server.entity.ServerCommandEntity;
 import com.thx.aiplatform.server.model.ServerCommandParameterDefinition;
 import com.thx.aiplatform.server.model.ServerCommandParameterType;
 import org.springframework.stereotype.Service;
@@ -46,12 +46,12 @@ public class ServerCommandTemplateService {
         }
     }
 
-    public List<ServerCommandParameterDefinition> parameters(ServerCommandDefinition command) {
-        return parseSchema(command.parameterSchema());
+    public List<ServerCommandParameterDefinition> parameters(ServerCommandEntity command) {
+        return parseSchema(command.getParameterSchema());
     }
 
-    public String render(ServerCommandDefinition command, String argumentsJson) {
-        return render(command.commandText(), parseSchema(command.parameterSchema()), argumentsJson);
+    public String render(ServerCommandEntity command, String argumentsJson) {
+        return render(command.getCommandText(), parseSchema(command.getParameterSchema()), argumentsJson);
     }
 
     public String classificationText(String template, String schemaJson) {

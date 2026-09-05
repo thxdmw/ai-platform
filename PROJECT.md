@@ -12,7 +12,7 @@
 - Spring Boot 3.5
 - Spring AI 1.1
 - Spring Modulith 1.4
-- Spring JDBC + Flyway
+- Spring JDBC（数据源与事务）+ MyBatis-Plus 3.5.17（数据访问）+ Flyway
 - PostgreSQL（生产）/ H2（本地与测试）
 - Maven
 - 原生 Web Component，用于跨项目嵌入网站助手
@@ -40,9 +40,12 @@
 |---|---|
 | `controller` | REST 与页面控制器，只做参数校验和响应装配，不含业务逻辑 |
 | `service` | 业务服务（对话编排、审批流、配置管理、外部客户端、SSH 执行） |
-| `model` | 请求/响应 DTO、内部实体记录和枚举 |
+| `entity`（website/server） | MyBatis-Plus 表映射的持久化实体，兼作服务层内部流转的领域对象，字段只定义这一份 |
+| `dto` | 请求入参（*Request），带 Bean Validation 校验 |
+| `vo` | API 出参（*View / *Result / 公开配置），与外层数据定义分离 |
+| `model` | 枚举与内部共享类型（参数定义、执行明细等不属于三层的类型） |
 | `config` | 配置属性（Properties）、Web 配置、拦截器和异常处理器 |
-| `repository`（website/server） | JDBC 数据访问 |
+| `repository`（website/server） | MyBatis-Plus 映射器与仓库（实体只经仓库进出数据库） |
 | `security`（仅 server） | 凭据加解密 |
 | `tool`（blog/server） | 暴露给模型的 Spring AI 工具 |
 

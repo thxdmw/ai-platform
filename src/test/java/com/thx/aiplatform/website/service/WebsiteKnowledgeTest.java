@@ -1,6 +1,6 @@
 package com.thx.aiplatform.website.service;
 
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntry;
+import com.thx.aiplatform.website.entity.WebsiteKnowledgeEntryEntity;
 import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryType;
 import com.thx.aiplatform.website.repository.WebsiteKnowledgeRepository;
 import org.junit.jupiter.api.Test;
@@ -29,11 +29,11 @@ class WebsiteKnowledgeTest {
         assertThat(context).doesNotContain("游戏项目");
     }
 
-    private WebsiteKnowledgeEntry entry(
+    private WebsiteKnowledgeEntryEntity entry(
             long id, WebsiteKnowledgeEntryType type, String title, String question,
             String content, String keywords, int priority
     ) {
         LocalDateTime now = LocalDateTime.now();
-        return new WebsiteKnowledgeEntry(id, type, title, question, content, keywords, true, priority, now, now);
+        return new WebsiteKnowledgeEntryEntity(id, type, title, question, content, keywords, true, priority, now, now);
     }
 }

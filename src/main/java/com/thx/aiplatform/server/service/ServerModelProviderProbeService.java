@@ -1,7 +1,11 @@
 package com.thx.aiplatform.server.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.thx.aiplatform.server.model.*;
+import com.thx.aiplatform.server.model.ServerModelApiProtocol;
+import com.thx.aiplatform.server.model.ServerModelCatalogEntry;
+import com.thx.aiplatform.server.entity.ServerModelProviderEntity;
+import com.thx.aiplatform.server.dto.ServerModelProviderProbeRequest;
+import com.thx.aiplatform.server.vo.ServerModelProviderProbeResult;
 import com.thx.aiplatform.server.repository.ServerModelProviderRepository;
 import com.thx.aiplatform.server.security.ServerCredentialCipher;
 import org.springframework.http.HttpHeaders;
@@ -68,9 +72,9 @@ public class ServerModelProviderProbeService {
         if (request.providerId() == null || request.providerId().isBlank()) {
             throw new IllegalArgumentException("测试连接时 API 密钥不能为空");
         }
-        ServerModelProviderDefinition provider = repository.findProvider(request.providerId())
+        ServerModelProviderEntity provider = repository.findProvider(request.providerId())
                 .orElseThrow(() -> new IllegalArgumentException("模型提供方不存在"));
-        return cipher.decrypt(provider.apiKeyCiphertext());
+        return cipher.decrypt(provider.getApiKeyCiphertext());
     }
 
     private void applyAuthentication(HttpHeaders headers, ServerModelApiProtocol protocol, String apiKey) {

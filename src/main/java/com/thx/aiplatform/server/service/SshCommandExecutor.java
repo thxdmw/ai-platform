@@ -1,7 +1,7 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.security.ServerCredentialCipher;
 import com.thx.aiplatform.server.model.SshExecutionResult;
-import com.thx.aiplatform.server.model.ServerDefinition;
+import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.model.ServerAuthenticationType;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
 
@@ -52,13 +52,13 @@ public class SshCommandExecutor {
     /**
      * 只验证连接与主机密钥，不执行任何命令；页面据此确信配置可用。
      */
-    public void testConnection(ServerDefinition server) {
+    public void testConnection(ServerEntity server) {
         Session session = null;
         byte[] credential = null;
         byte[] passphrase = null;
         try {
-            credential = credentialCipher.decrypt(server.credentialCiphertext());
-            passphrase = decryptOptional(server.passphraseCiphertext());
+            credential = credentialCipher.decrypt(server.getCredentialCiphertext());
+            passphrase = decryptOptional(server.getPassphraseCiphertext());
             session = connect(server, credential, passphrase);
         } catch (Exception exception) {
             throw new IllegalStateException("SSH 连接失败：" + safeMessage(exception));
@@ -73,15 +73,15 @@ public class SshCommandExecutor {
      * 执行单条命令。stdin 置 null 阻止远端命令读取到任何用户输入；退出码、输出、耗时和
      * 截断标记一起封装回 {@link SshExecutionResult} 供模型判断。
      */
-    public SshExecutionResult execute(ServerDefinition server, String command) {
+    public SshExecutionResult execute(ServerEntity server, String command) {
         Session session = null;
         ChannelExec channel = null;
         byte[] credential = null;
         byte[] passphrase = null;
         long started = clock.millis();
         try {
-            credential = credentialCipher.decrypt(server.credentialCiphertext());
-            passphrase = decryptOptional(server.passphraseCiphertext());
+            credential = credentialCipher.decrypt(server.getCredentialCiphertext());
+            passphrase = decryptOptional(server.getPassphraseCiphertext());
             session = connect(server, credential, passphrase);
             channel = (ChannelExec) session.openChannel("exec");
             channel.setCommand(command);
@@ -90,7 +90,7 @@ public class SshCommandExecutor {
             InputStream stderr = channel.getExtInputStream();
             channel.connect(Math.toIntExact(properties.getConnectTimeout().toMillis()));
             CapturedOutput captured = capture(channel, stdout, stderr, properties.getCommandTimeout(), properties.getMaxOutputBytes());
-            return new SshExecutionResult(server.id(), channel.getExitStatus(), captured.stdout(), captured.stderr(),
+            return new SshExecutionResult(server.getId(), channel.getExitStatus(), captured.stdout(), captured.stderr(),
                     clock.millis() - started, captured.truncated());
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
@@ -111,18 +111,18 @@ public class SshCommandExecutor {
      * 额外允许 keyboard-interactive，因为部分服务器禁用了 password 但允许键盘交互式密码
      * 认证，两者都是「密码类」认证，不引入公钥之外的信任。
      */
-    private Session connect(ServerDefinition server, byte[] credential, byte[] passphrase) throws Exception {
+    private Session connect(ServerEntity server, byte[] credential, byte[] passphrase) throws Exception {
         JSch jsch = new JSch();
-        jsch.setKnownHosts(new ByteArrayInputStream(server.hostKey().getBytes(StandardCharsets.UTF_8)));
-        if (server.authenticationType() == ServerAuthenticationType.PRIVATE_KEY) {
-            jsch.addIdentity("server-" + server.id(), credential, null, passphrase);
+        jsch.setKnownHosts(new ByteArrayInputStream(server.getHostKey().getBytes(StandardCharsets.UTF_8)));
+        if (server.getAuthenticationType() == ServerAuthenticationType.PRIVATE_KEY) {
+            jsch.addIdentity("server-" + server.getId(), credential, null, passphrase);
         }
-        Session session = jsch.getSession(server.username(), server.host(), server.port());
+        Session session = jsch.getSession(server.getUsername(), server.getHost(), server.getPort());
         try {
-            if (server.authenticationType() == ServerAuthenticationType.PASSWORD) session.setPassword(credential);
+            if (server.getAuthenticationType() == ServerAuthenticationType.PASSWORD) session.setPassword(credential);
             session.setConfig("StrictHostKeyChecking", "yes");
             session.setConfig("PreferredAuthentications",
-                    server.authenticationType() == ServerAuthenticationType.PRIVATE_KEY ? "publickey" : "password,keyboard-interactive");
+                    server.getAuthenticationType() == ServerAuthenticationType.PRIVATE_KEY ? "publickey" : "password,keyboard-interactive");
             session.connect(Math.toIntExact(properties.getConnectTimeout().toMillis()));
             return session;
         } catch (Exception exception) {

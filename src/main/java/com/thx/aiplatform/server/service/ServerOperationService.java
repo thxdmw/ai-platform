@@ -1,12 +1,12 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.model.SshExecutionResult;
-import com.thx.aiplatform.server.model.ServerOperationResult;
-import com.thx.aiplatform.server.model.ServerOperationDecisionRequest;
-import com.thx.aiplatform.server.model.ServerOperationDecisionResult;
-import com.thx.aiplatform.server.model.ServerDefinition;
+import com.thx.aiplatform.server.vo.ServerOperationResult;
+import com.thx.aiplatform.server.dto.ServerOperationDecisionRequest;
+import com.thx.aiplatform.server.vo.ServerOperationDecisionResult;
+import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
-import com.thx.aiplatform.server.model.ServerCommandDefinition;
-import com.thx.aiplatform.server.model.PendingServerOperationView;
+import com.thx.aiplatform.server.entity.ServerCommandEntity;
+import com.thx.aiplatform.server.vo.PendingServerOperationView;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,17 +59,17 @@ public class ServerOperationService {
      * 只允许一个待确认操作，先把旧的清掉，防止模型连续多次提出危险命令时页面出现多个
      * 确认框互相干扰。
      */
-    public PendingServerOperationView prepare(String conversationId, ServerDefinition server,
-                                       ServerCommandDefinition command, String reason) {
-        return prepare(conversationId, server, command, command.commandText(), reason);
+    public PendingServerOperationView prepare(String conversationId, ServerEntity server,
+                                       ServerCommandEntity command, String reason) {
+        return prepare(conversationId, server, command, command.getCommandText(), reason);
     }
 
-    public PendingServerOperationView prepare(String conversationId, ServerDefinition server,
-                                               ServerCommandDefinition command, String renderedCommand,
+    public PendingServerOperationView prepare(String conversationId, ServerEntity server,
+                                               ServerCommandEntity command, String renderedCommand,
                                                String reason) {
         cleanupExpired();
         cancelForConversation(conversationId);
-        if (command.riskLevel() != ServerCommandRisk.DANGEROUS) {
+        if (command.getRiskLevel() != ServerCommandRisk.DANGEROUS) {
             throw new IllegalArgumentException("普通命令不需要生成确认选项");
         }
         if (operations.size() >= MAX_PENDING_OPERATIONS) throw new IllegalStateException("待确认服务器操作过多，请稍后重试");
@@ -84,7 +84,7 @@ public class ServerOperationService {
      * 临时命令只在无法证明只读时进入这里。commandText 保留给页面复核，renderedCommand 是
      * 已安全引用工作目录后的实际执行快照；二者分开保存，审批后绝不重新读取模型参数。
      */
-    PendingServerOperationView prepareTemporary(String conversationId, ServerDefinition server,
+    PendingServerOperationView prepareTemporary(String conversationId, ServerEntity server,
                                                 String workingDirectory, String commandText,
                                                 String renderedCommand, String reason) {
         cleanupExpired();
@@ -93,8 +93,8 @@ public class ServerOperationService {
             throw new IllegalStateException("待确认服务器操作过多，请稍后重试");
         }
         String actionId = UUID.randomUUID().toString();
-        ServerCommandDefinition command = new ServerCommandDefinition(
-                "temporary", server.id(), "临时 Shell 命令", "仅用于当前任务，不写入固定命令列表",
+        ServerCommandEntity command = new ServerCommandEntity(
+                "temporary", server.getId(), "临时 Shell 命令", "仅用于当前任务，不写入固定命令列表",
                 commandText, "[]", ServerCommandRisk.DANGEROUS, true, 0);
         PendingOperation pending = new PendingOperation(actionId, conversationId, server, command, renderedCommand,
                 workingDirectory, true, normalizeReason(reason), clock.instant().plus(properties.getApprovalTtl()));
@@ -120,7 +120,7 @@ public class ServerOperationService {
         }
         PendingOperation pending = consume(actionId);
         log.info("用户处理临时命令审批，conversationId={}，serverId={}，actionId={}，decision={}",
-                pending.conversationId(), pending.server().id(), pending.actionId(), request.decision());
+                pending.conversationId(), pending.server().getId(), pending.actionId(), request.decision());
         return switch (request.decision()) {
             case "EXECUTE_ONCE" -> toDecisionResult(execute(pending, false), "EXECUTED");
             case "EXECUTE_AND_REMEMBER" -> {
@@ -136,17 +136,17 @@ public class ServerOperationService {
     private ServerOperationResult execute(PendingOperation pending, boolean rememberExact) {
         long startedAt = System.nanoTime();
         log.info("服务器审批命令开始执行，conversationId={}，serverId={}，actionId={}，temporary={}，rememberExact={}",
-                pending.conversationId(), pending.server().id(), pending.actionId(), pending.temporary(), rememberExact);
+                pending.conversationId(), pending.server().getId(), pending.actionId(), pending.temporary(), rememberExact);
         SshExecutionResult result;
         try {
             result = executor.execute(pending.server(), pending.renderedCommand());
         } catch (RuntimeException exception) {
             // 网络中断时远端命令可能已经开始，不能自动重试同一危险操作。
             log.warn("服务器审批命令结果不确定，conversationId={}，serverId={}，actionId={}，耗时={}ms",
-                    pending.conversationId(), pending.server().id(), pending.actionId(),
+                    pending.conversationId(), pending.server().getId(), pending.actionId(),
                     java.time.Duration.ofNanos(System.nanoTime() - startedAt).toMillis());
-            String continuationId = continuationService.prepare(pending.conversationId(), pending.server().id(),
-                    "系统可信事件：用户已确认执行危险命令“" + pending.command().name()
+            String continuationId = continuationService.prepare(pending.conversationId(), pending.server().getId(),
+                    "系统可信事件：用户已确认执行危险命令“" + pending.command().getName()
                             + "”，但执行结果不确定：" + exception.getMessage()
                             + "。请明确提醒用户先核对服务器实际状态，不得自动重试该命令。");
             return new ServerOperationResult(pending.actionId(), false,
@@ -155,10 +155,10 @@ public class ServerOperationService {
         if (rememberExact && result.successful()) {
             rememberExact(pending);
         }
-        String continuationId = continuationService.prepare(pending.conversationId(), pending.server().id(),
+        String continuationId = continuationService.prepare(pending.conversationId(), pending.server().getId(),
                 operationContinuationMessage(pending, result));
         log.info("服务器审批命令执行完成，conversationId={}，serverId={}，actionId={}，success={}，耗时={}ms",
-                pending.conversationId(), pending.server().id(), pending.actionId(), result.successful(),
+                pending.conversationId(), pending.server().getId(), pending.actionId(), result.successful(),
                 java.time.Duration.ofNanos(System.nanoTime() - startedAt).toMillis());
         return new ServerOperationResult(pending.actionId(), result.successful(),
                 result.successful() ? "服务器命令执行成功" : "服务器命令执行失败，退出码 " + result.exitCode(),
@@ -183,8 +183,8 @@ public class ServerOperationService {
         String normalized = feedback == null ? "" : feedback.trim();
         if (normalized.isEmpty()) throw new IllegalArgumentException("请填写补充说明");
         normalized = normalized.substring(0, Math.min(normalized.length(), 1000));
-        String continuationId = continuationService.prepare(pending.conversationId(), pending.server().id(),
-                "系统可信事件：用户拒绝执行临时命令“" + pending.command().commandText() + "”。\n"
+        String continuationId = continuationService.prepare(pending.conversationId(), pending.server().getId(),
+                "系统可信事件：用户拒绝执行临时命令“" + pending.command().getCommandText() + "”。\n"
                         + "用户补充说明：" + normalized + "\n"
                         + "不得执行已拒绝的命令；请根据补充说明继续原任务，必要时提出新的最小化操作。");
         return new ServerOperationDecisionResult(pending.actionId(), "REVISED", "已记录补充说明，任务将继续",
@@ -198,8 +198,8 @@ public class ServerOperationService {
         if (trusted.size() >= MAX_TRUSTED_EXACT_PER_CONVERSATION) {
             trusted.stream().findFirst().ifPresent(trusted::remove);
         }
-        trusted.add(new TrustedExactCommand(pending.server().id(), pending.workingDirectory(),
-                pending.command().commandText()));
+        trusted.add(new TrustedExactCommand(pending.server().getId(), pending.workingDirectory(),
+                pending.command().getCommandText()));
     }
 
     private ServerOperationDecisionResult toDecisionResult(ServerOperationResult result, String successStatus) {
@@ -223,7 +223,7 @@ public class ServerOperationService {
      * 服务器配置变更或删除时调用：连接参数已变，残存的待确认操作必须作废。
      */
     void cancelForServer(String serverId) {
-        operations.entrySet().removeIf(entry -> entry.getValue().server().id().equals(serverId));
+        operations.entrySet().removeIf(entry -> entry.getValue().server().getId().equals(serverId));
         trustedExactCommands.values().forEach(values -> values.removeIf(value -> value.serverId().equals(serverId)));
     }
 
@@ -237,9 +237,9 @@ public class ServerOperationService {
     }
 
     private PendingServerOperationView toView(PendingOperation pending) {
-        return new PendingServerOperationView(pending.actionId(), pending.server().id(), pending.server().name(),
-                pending.command().id(), pending.command().name(),
-                pending.temporary() ? pending.command().commandText() : pending.renderedCommand(),
+        return new PendingServerOperationView(pending.actionId(), pending.server().getId(), pending.server().getName(),
+                pending.command().getId(), pending.command().getName(),
+                pending.temporary() ? pending.command().getCommandText() : pending.renderedCommand(),
                 pending.workingDirectory(), pending.temporary(), pending.reason(), pending.expiresAt(),
                 "PENDING_APPROVAL", pending.temporary() ? "EXECUTE_TEMPORARY_COMMAND" : "EXECUTE_COMMAND");
     }
@@ -260,13 +260,13 @@ public class ServerOperationService {
      * 服务端从远端实际抓回的事实，模型应基于它下结论，且末尾明确禁止自动重试。
      */
     private String operationContinuationMessage(PendingOperation pending, SshExecutionResult result) {
-        return "系统可信事件：用户已确认并执行危险命令“" + pending.command().name() + "”。\n"
+        return "系统可信事件：用户已确认并执行危险命令“" + pending.command().getName() + "”。\n"
                 + result.forModel() + "\n请基于真实执行结果继续完成用户原来的任务并给出结论，"
                 + "不得自动重试刚才的危险命令。";
     }
 
-    private record PendingOperation(String actionId, String conversationId, ServerDefinition server,
-                                    ServerCommandDefinition command, String renderedCommand,
+    private record PendingOperation(String actionId, String conversationId, ServerEntity server,
+                                    ServerCommandEntity command, String renderedCommand,
                                     String workingDirectory, boolean temporary,
                                     String reason, Instant expiresAt) { }
 

@@ -1,6 +1,6 @@
 package com.thx.aiplatform.server.controller;
 import com.thx.aiplatform.server.service.ServerCommandProposalService;
-import com.thx.aiplatform.server.model.ServerCommandProposalResult;
+import com.thx.aiplatform.server.vo.ServerCommandProposalResult;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;

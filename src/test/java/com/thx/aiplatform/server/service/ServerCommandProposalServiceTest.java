@@ -1,10 +1,10 @@
 package com.thx.aiplatform.server.service;
-import com.thx.aiplatform.server.model.ServerDefinition;
-import com.thx.aiplatform.server.model.ServerCommandView;
+import com.thx.aiplatform.server.entity.ServerEntity;
+import com.thx.aiplatform.server.vo.ServerCommandView;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
-import com.thx.aiplatform.server.model.ServerCommandProposalResult;
+import com.thx.aiplatform.server.vo.ServerCommandProposalResult;
 import com.thx.aiplatform.server.model.ServerAuthenticationType;
-import com.thx.aiplatform.server.model.PendingServerCommandProposalView;
+import com.thx.aiplatform.server.vo.PendingServerCommandProposalView;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
 
 import org.junit.jupiter.api.Test;
@@ -80,8 +80,8 @@ class ServerCommandProposalServiceTest {
                 Clock.fixed(Instant.parse("2026-09-01T00:00:00Z"), ZoneOffset.UTC));
     }
 
-    private ServerDefinition server() {
-        return new ServerDefinition("server-a", "服务器 A", "host", 22, "ops", ServerAuthenticationType.PASSWORD,
+    private ServerEntity server() {
+        return new ServerEntity("server-a", "服务器 A", "host", 22, "ops", ServerAuthenticationType.PASSWORD,
                 "ciphertext", null, "host ssh-ed25519 AAAATESTKEY", true);
     }
 }

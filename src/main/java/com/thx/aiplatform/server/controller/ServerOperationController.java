@@ -1,8 +1,8 @@
 package com.thx.aiplatform.server.controller;
 import com.thx.aiplatform.server.service.ServerOperationService;
-import com.thx.aiplatform.server.model.ServerOperationResult;
-import com.thx.aiplatform.server.model.ServerOperationDecisionRequest;
-import com.thx.aiplatform.server.model.ServerOperationDecisionResult;
+import com.thx.aiplatform.server.vo.ServerOperationResult;
+import com.thx.aiplatform.server.dto.ServerOperationDecisionRequest;
+import com.thx.aiplatform.server.vo.ServerOperationDecisionResult;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

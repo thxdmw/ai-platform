@@ -1,9 +1,9 @@
 package com.thx.aiplatform.website.service;
-import com.thx.aiplatform.website.model.WebsiteChatRequest;
+import com.thx.aiplatform.website.dto.WebsiteChatRequest;
 
 import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;
-import com.thx.aiplatform.website.model.WebsiteAssistantSettings;
+import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
 import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -41,7 +41,7 @@ class WebsiteAssistantServiceTest {
         WebsiteKnowledge knowledge = mock(WebsiteKnowledge.class);
         WebsiteSettingsRepository settingsRepository = mock(WebsiteSettingsRepository.class);
         when(knowledge.contentFor("博客在哪里？")).thenReturn("首页包含博客入口");
-        when(settingsRepository.get()).thenReturn(new WebsiteAssistantSettings(
+        when(settingsRepository.get()).thenReturn(new WebsiteAssistantSettingsEntity(
                 "网站助手", "你好", "优先回答首页入口", true, LocalDateTime.now()));
         when(gateway.stream(org.mockito.ArgumentMatchers.any())).thenReturn(Flux.just("请点击博客卡片"));
         WebsiteAssistantService service = new WebsiteAssistantService(gateway, knowledge, settingsRepository);

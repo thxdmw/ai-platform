@@ -1,10 +1,10 @@
 package com.thx.aiplatform.server.controller;
 
-import com.thx.aiplatform.server.model.ServerModelProviderRequest;
-import com.thx.aiplatform.server.model.ServerModelProviderProbeRequest;
-import com.thx.aiplatform.server.model.ServerModelProviderProbeResult;
-import com.thx.aiplatform.server.model.ServerModelProviderView;
-import com.thx.aiplatform.server.model.ServerModelView;
+import com.thx.aiplatform.server.dto.ServerModelProviderRequest;
+import com.thx.aiplatform.server.dto.ServerModelProviderProbeRequest;
+import com.thx.aiplatform.server.vo.ServerModelProviderProbeResult;
+import com.thx.aiplatform.server.vo.ServerModelProviderView;
+import com.thx.aiplatform.server.vo.ServerModelView;
 import com.thx.aiplatform.server.service.ServerModelProviderService;
 import com.thx.aiplatform.server.service.ServerModelProviderProbeService;
 import jakarta.validation.Valid;

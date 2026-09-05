@@ -1,8 +1,8 @@
 package com.thx.aiplatform.blog.controller;
 import com.thx.aiplatform.blog.service.BlogPublicationService;
 import com.thx.aiplatform.blog.service.BlogAssistantService;
-import com.thx.aiplatform.blog.model.PendingPublicationView;
-import com.thx.aiplatform.blog.model.BlogChatRequest;
+import com.thx.aiplatform.blog.vo.PendingPublicationView;
+import com.thx.aiplatform.blog.dto.BlogChatRequest;
 import com.thx.aiplatform.blog.config.BlogAssistantProperties;
 
 import jakarta.validation.Valid;

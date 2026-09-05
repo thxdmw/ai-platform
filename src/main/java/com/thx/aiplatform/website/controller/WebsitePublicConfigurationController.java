@@ -1,7 +1,7 @@
 package com.thx.aiplatform.website.controller;
 
-import com.thx.aiplatform.website.model.WebsiteAssistantSettings;
-import com.thx.aiplatform.website.model.WebsitePublicConfiguration;
+import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
+import com.thx.aiplatform.website.vo.WebsitePublicConfiguration;
 import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +20,7 @@ class WebsitePublicConfigurationController {
 
     @GetMapping("/configuration")
     WebsitePublicConfiguration configuration() {
-        WebsiteAssistantSettings settings = settingsRepository.get();
-        return new WebsitePublicConfiguration(settings.assistantName(), settings.welcomeMessage(), settings.enabled());
+        WebsiteAssistantSettingsEntity settings = settingsRepository.get();
+        return new WebsitePublicConfiguration(settings.getAssistantName(), settings.getWelcomeMessage(), settings.isEnabled());
     }
 }

@@ -1,7 +1,7 @@
 package com.thx.aiplatform.server.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.thx.aiplatform.server.model.ServerCommandDefinition;
+import com.thx.aiplatform.server.entity.ServerCommandEntity;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +20,7 @@ class ServerCommandTemplateServiceTest {
                   {"name":"depth","type":"INTEGER","minValue":1,"maxValue":5}
                 ]
                 """);
-        ServerCommandDefinition command = command("find {{path}} -maxdepth {{depth}} -type f", schema);
+        ServerCommandEntity command = command("find {{path}} -maxdepth {{depth}} -type f", schema);
 
         assertThat(service.render(command, "{\"path\":\"/var/log/nginx\",\"depth\":\"2\"}"))
                 .isEqualTo("find '/var/log/nginx' -maxdepth '2' -type f");
@@ -31,7 +31,7 @@ class ServerCommandTemplateServiceTest {
         String schema = service.normalizeSchema("ls -la {{path}}", """
                 [{"name":"path","type":"PATH","allowedRoots":["/var/log"]}]
                 """);
-        ServerCommandDefinition command = command("ls -la {{path}}", schema);
+        ServerCommandEntity command = command("ls -la {{path}}", schema);
 
         assertThatThrownBy(() -> service.render(command, "{\"path\":\"/etc\"}"))
                 .hasMessageContaining("超出允许目录");
@@ -44,14 +44,14 @@ class ServerCommandTemplateServiceTest {
         String schema = service.normalizeSchema("journalctl -u {{service}}", """
                 [{"name":"service","type":"TEXT","pattern":"[A-Za-z0-9_.; -]+","maxLength":80}]
                 """);
-        ServerCommandDefinition command = command("journalctl -u {{service}}", schema);
+        ServerCommandEntity command = command("journalctl -u {{service}}", schema);
 
         assertThat(service.render(command, "{\"service\":\"nginx; reboot\"}"))
                 .isEqualTo("journalctl -u 'nginx; reboot'");
     }
 
-    private ServerCommandDefinition command(String template, String schema) {
-        return new ServerCommandDefinition("command-1", "server-1", "模板", "测试", template, schema,
+    private ServerCommandEntity command(String template, String schema) {
+        return new ServerCommandEntity("command-1", "server-1", "模板", "测试", template, schema,
                 ServerCommandRisk.NORMAL, true, 0);
     }
 }

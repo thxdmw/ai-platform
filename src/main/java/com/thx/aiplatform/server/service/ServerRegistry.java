@@ -1,7 +1,7 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.repository.ServerConfigurationRepository;
-import com.thx.aiplatform.server.model.ServerView;
-import com.thx.aiplatform.server.model.ServerDefinition;
+import com.thx.aiplatform.server.vo.ServerView;
+import com.thx.aiplatform.server.entity.ServerEntity;
 
 import org.springframework.stereotype.Component;
 
@@ -26,16 +26,16 @@ public class ServerRegistry {
     /**
      * 统一的「不存在即抛错」入口，所有按 ID 取服务器的调用都走这里，保证错误口径一致。
      */
-    ServerDefinition require(String serverId) {
+    ServerEntity require(String serverId) {
         return repository.findServer(serverId).orElseThrow(() -> new IllegalArgumentException("服务器不存在：" + serverId));
     }
 
     /**
      * 要求服务器必须处于启用状态：停用的服务器不能被对话框选作执行目标。
      */
-    ServerDefinition requireEnabled(String serverId) {
-        ServerDefinition server = require(serverId);
-        if (!server.enabled()) throw new IllegalArgumentException("服务器已停用：" + server.name());
+    ServerEntity requireEnabled(String serverId) {
+        ServerEntity server = require(serverId);
+        if (!server.isEnabled()) throw new IllegalArgumentException("服务器已停用：" + server.getName());
         return server;
     }
 
@@ -43,8 +43,8 @@ public class ServerRegistry {
      * 领域实体转对外视图：凭据密文字段绝不透出。credentialConfigured 恒为 true，因为创建
      * 时凭据必填、更新时留空则保留原密文，库中服务器必然持有凭据，前端可放心依赖该标志。
      */
-    ServerView toView(ServerDefinition server) {
-        return new ServerView(server.id(), server.name(), server.host(), server.port(), server.username(),
-                server.authenticationType().name(), server.hostKey(), server.enabled(), true);
+    ServerView toView(ServerEntity server) {
+        return new ServerView(server.getId(), server.getName(), server.getHost(), server.getPort(), server.getUsername(),
+                server.getAuthenticationType().name(), server.getHostKey(), server.isEnabled(), true);
     }
 }

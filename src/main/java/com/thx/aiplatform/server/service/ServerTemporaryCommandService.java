@@ -1,8 +1,8 @@
 package com.thx.aiplatform.server.service;
 
-import com.thx.aiplatform.server.model.PendingServerOperationView;
+import com.thx.aiplatform.server.vo.PendingServerOperationView;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
-import com.thx.aiplatform.server.model.ServerDefinition;
+import com.thx.aiplatform.server.entity.ServerEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,16 +28,16 @@ public class ServerTemporaryCommandService {
     }
 
     /** 返回给模型的工具结果只包含执行事实或暂停状态，不泄露内部 actionId。 */
-    public String executeOrPrepare(String conversationId, ServerDefinition server, String commandText,
+    public String executeOrPrepare(String conversationId, ServerEntity server, String commandText,
                                    String workingDirectory, String reason) {
         String command = normalizeCommand(commandText);
         String directory = normalizeWorkingDirectory(workingDirectory);
         String renderedCommand = render(directory, command);
         ServerCommandRisk risk = riskClassifier.classify(command);
         boolean trustedExact = risk == ServerCommandRisk.DANGEROUS
-                && operationService.isTrustedExact(conversationId, server.id(), directory, command);
+                && operationService.isTrustedExact(conversationId, server.getId(), directory, command);
         log.info("临时命令完成安全判定，conversationId={}，serverId={}，risk={}，trustedExact={}，workingDirectory={}",
-                conversationId, server.id(), risk, trustedExact, directory == null ? "<default>" : directory);
+                conversationId, server.getId(), risk, trustedExact, directory == null ? "<default>" : directory);
         if (risk == ServerCommandRisk.NORMAL || trustedExact) {
             return executor.execute(server, renderedCommand).forModel();
         }

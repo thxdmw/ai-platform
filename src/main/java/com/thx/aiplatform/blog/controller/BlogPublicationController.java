@@ -1,6 +1,6 @@
 package com.thx.aiplatform.blog.controller;
 import com.thx.aiplatform.blog.service.BlogPublicationService;
-import com.thx.aiplatform.blog.model.PublicationResult;
+import com.thx.aiplatform.blog.vo.PublicationResult;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;

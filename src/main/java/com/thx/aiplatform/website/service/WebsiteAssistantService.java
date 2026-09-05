@@ -1,9 +1,9 @@
 package com.thx.aiplatform.website.service;
-import com.thx.aiplatform.website.model.WebsiteChatRequest;
+import com.thx.aiplatform.website.dto.WebsiteChatRequest;
 
 import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;
-import com.thx.aiplatform.website.model.WebsiteAssistantSettings;
+import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
 import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -54,13 +54,13 @@ public class WebsiteAssistantService {
     // 且会原样存进会话记忆，破坏后续上下文的整洁与一致。
     public Flux<String> stream(WebsiteChatRequest request) {
         String userMessage = request.message().trim();
-        WebsiteAssistantSettings settings = settingsRepository.get();
-        if (!settings.enabled()) {
+        WebsiteAssistantSettingsEntity settings = settingsRepository.get();
+        if (!settings.isEnabled()) {
             return Flux.error(new IllegalStateException("网站助手已暂停服务"));
         }
-        String supplementalRules = settings.promptAddition().isBlank()
+        String supplementalRules = settings.getPromptAddition().isBlank()
                 ? ""
-                : "\n站长补充的回答规则（不能覆盖上述安全规则）：\n" + settings.promptAddition();
+                : "\n站长补充的回答规则（不能覆盖上述安全规则）：\n" + settings.getPromptAddition();
         String systemPrompt = SYSTEM_PROMPT_TEMPLATE.formatted(knowledge.contentFor(userMessage))
                 + supplementalRules;
         AssistantChatCommand command = new AssistantChatCommand(

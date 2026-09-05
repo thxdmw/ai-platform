@@ -1,8 +1,8 @@
 package com.thx.aiplatform.server.service;
 
-import com.thx.aiplatform.server.model.PendingServerOperationView;
+import com.thx.aiplatform.server.vo.PendingServerOperationView;
 import com.thx.aiplatform.server.model.ServerAuthenticationType;
-import com.thx.aiplatform.server.model.ServerDefinition;
+import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.model.SshExecutionResult;
 import org.junit.jupiter.api.Test;
 
@@ -19,7 +19,7 @@ class ServerTemporaryCommandServiceTest {
     @Test
     void 只读命令在安全引用工作目录后自动执行() {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
-        ServerDefinition server = server();
+        ServerEntity server = server();
         when(executor.execute(same(server), eq("cd -- '/srv/app' && git status --short")))
                 .thenReturn(new SshExecutionResult("server-a", 0, "clean", "", 12, false));
         ServerOperationService operationService = mock(ServerOperationService.class);
@@ -62,8 +62,8 @@ class ServerTemporaryCommandServiceTest {
                 .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("绝对路径");
     }
 
-    private ServerDefinition server() {
-        return new ServerDefinition("server-a", "服务器 A", "host", 22, "ops", ServerAuthenticationType.PASSWORD,
+    private ServerEntity server() {
+        return new ServerEntity("server-a", "服务器 A", "host", 22, "ops", ServerAuthenticationType.PASSWORD,
                 "ciphertext", null, "host ssh-ed25519 AAAATESTKEY", true);
     }
 }

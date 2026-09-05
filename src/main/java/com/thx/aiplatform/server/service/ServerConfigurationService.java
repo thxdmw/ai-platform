@@ -1,14 +1,14 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.security.ServerCredentialCipher;
 import com.thx.aiplatform.server.repository.ServerConfigurationRepository;
-import com.thx.aiplatform.server.model.ServerView;
-import com.thx.aiplatform.server.model.ServerDefinition;
-import com.thx.aiplatform.server.model.ServerConnectionTestResult;
-import com.thx.aiplatform.server.model.ServerConfigurationRequest;
-import com.thx.aiplatform.server.model.ServerCommandView;
+import com.thx.aiplatform.server.vo.ServerView;
+import com.thx.aiplatform.server.entity.ServerEntity;
+import com.thx.aiplatform.server.vo.ServerConnectionTestResult;
+import com.thx.aiplatform.server.dto.ServerConfigurationRequest;
+import com.thx.aiplatform.server.vo.ServerCommandView;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
-import com.thx.aiplatform.server.model.ServerCommandRequest;
-import com.thx.aiplatform.server.model.ServerCommandDefinition;
+import com.thx.aiplatform.server.dto.ServerCommandRequest;
+import com.thx.aiplatform.server.entity.ServerCommandEntity;
 import com.thx.aiplatform.server.model.ServerAuthenticationType;
 
 import org.springframework.dao.DataIntegrityViolationException;
@@ -76,10 +76,10 @@ public class ServerConfigurationService {
     public ServerView createServer(ServerConfigurationRequest request) {
         String credential = requiredCredential(request.credential());
         ServerAuthenticationType authenticationType = ServerAuthenticationType.parse(request.authenticationType());
-        ServerDefinition server = definition(UUID.randomUUID().toString(), request, authenticationType,
+        ServerEntity server = definition(UUID.randomUUID().toString(), request, authenticationType,
                 credentialCipher.encrypt(credential), encryptedPassphrase(authenticationType, request.privateKeyPassphrase()));
         repository.insertServer(server);
-        installMissingDefaultCommands(server.id());
+        installMissingDefaultCommands(server.getId());
         return registry.toView(server);
     }
 
@@ -90,17 +90,17 @@ public class ServerConfigurationService {
      */
     @Transactional
     public ServerView updateServer(String id, ServerConfigurationRequest request) {
-        ServerDefinition existing = registry.require(id);
+        ServerEntity existing = registry.require(id);
         ServerAuthenticationType authenticationType = ServerAuthenticationType.parse(request.authenticationType());
         boolean replacesCredential = request.credential() != null && !request.credential().isBlank();
-        if (authenticationType != existing.authenticationType() && !replacesCredential) {
+        if (authenticationType != existing.getAuthenticationType() && !replacesCredential) {
             throw new IllegalArgumentException("切换认证方式时必须重新填写 SSH 密码或私钥");
         }
         String encryptedCredential = replacesCredential
-                ? credentialCipher.encrypt(request.credential()) : existing.credentialCiphertext();
+                ? credentialCipher.encrypt(request.credential()) : existing.getCredentialCiphertext();
         String encryptedPassphrase = replacesCredential
-                ? encryptedPassphrase(authenticationType, request.privateKeyPassphrase()) : existing.passphraseCiphertext();
-        ServerDefinition server = definition(id, request, authenticationType, encryptedCredential, encryptedPassphrase);
+                ? encryptedPassphrase(authenticationType, request.privateKeyPassphrase()) : existing.getPassphraseCiphertext();
+        ServerEntity server = definition(id, request, authenticationType, encryptedCredential, encryptedPassphrase);
         operationService.cancelForServer(id);
         repository.updateServer(server);
         return registry.toView(server);
@@ -135,7 +135,7 @@ public class ServerConfigurationService {
     @Transactional
     public ServerCommandView createCommand(String serverId, ServerCommandRequest request) {
         registry.require(serverId);
-        ServerCommandDefinition command = commandDefinition(UUID.randomUUID().toString(), serverId, request);
+        ServerCommandEntity command = commandDefinition(UUID.randomUUID().toString(), serverId, request);
         try { repository.insertCommand(command); }
         catch (DataIntegrityViolationException exception) {
             throw new IllegalArgumentException("同一服务器不能配置重名命令");
@@ -149,9 +149,9 @@ public class ServerConfigurationService {
      */
     @Transactional
     public ServerCommandView updateCommand(String id, ServerCommandRequest request) {
-        ServerCommandDefinition existing = requireCommand(id);
-        ServerCommandDefinition command = commandDefinition(id, existing.serverId(), request);
-        operationService.cancelForServer(existing.serverId());
+        ServerCommandEntity existing = requireCommand(id);
+        ServerCommandEntity command = commandDefinition(id, existing.getServerId(), request);
+        operationService.cancelForServer(existing.getServerId());
         try { repository.updateCommand(command); }
         catch (DataIntegrityViolationException exception) {
             throw new IllegalArgumentException("同一服务器不能配置重名命令");
@@ -161,18 +161,18 @@ public class ServerConfigurationService {
 
     @Transactional
     public void deleteCommand(String id) {
-        ServerCommandDefinition existing = requireCommand(id);
-        operationService.cancelForServer(existing.serverId());
+        ServerCommandEntity existing = requireCommand(id);
+        operationService.cancelForServer(existing.getServerId());
         repository.deleteCommand(id);
     }
 
     public ServerConnectionTestResult testConnection(String id) {
-        ServerDefinition server = registry.requireEnabled(id);
+        ServerEntity server = registry.requireEnabled(id);
         executor.testConnection(server);
         return new ServerConnectionTestResult(true, "SSH 连接和主机密钥校验成功");
     }
 
-    public List<ServerCommandDefinition> enabledCommands(String serverId) {
+    public List<ServerCommandEntity> enabledCommands(String serverId) {
         return repository.findCommands(serverId, true);
     }
 
@@ -180,14 +180,14 @@ public class ServerConfigurationService {
      * 供模型工具按命令 ID 取命令：同时校验命令属于当前对话的服务器且处于启用状态，
      * 防止工具拿 A 服务器的命令 ID 到 B 服务器执行。
      */
-    public ServerCommandDefinition requireEnabledCommand(String serverId, String commandId) {
-        ServerCommandDefinition command = requireCommand(commandId);
-        if (!command.serverId().equals(serverId)) throw new IllegalArgumentException("命令不属于当前对话选择的服务器");
-        if (!command.enabled()) throw new IllegalArgumentException("命令已停用：" + command.name());
+    public ServerCommandEntity requireEnabledCommand(String serverId, String commandId) {
+        ServerCommandEntity command = requireCommand(commandId);
+        if (!command.getServerId().equals(serverId)) throw new IllegalArgumentException("命令不属于当前对话选择的服务器");
+        if (!command.isEnabled()) throw new IllegalArgumentException("命令已停用：" + command.getName());
         return command;
     }
 
-    private ServerCommandDefinition requireCommand(String id) {
+    private ServerCommandEntity requireCommand(String id) {
         return repository.findCommand(id).orElseThrow(() -> new IllegalArgumentException("服务器命令不存在"));
     }
 
@@ -197,30 +197,30 @@ public class ServerConfigurationService {
      */
     private void installMissingDefaultCommands(String serverId) {
         Set<String> existingNames = repository.findCommands(serverId, false).stream()
-                .map(ServerCommandDefinition::name)
+                .map(ServerCommandEntity::getName)
                 .collect(Collectors.toSet());
         DEFAULT_COMMANDS.stream()
                 .filter(template -> !existingNames.contains(template.name()))
-                .map(template -> new ServerCommandDefinition(UUID.randomUUID().toString(), serverId,
+                .map(template -> new ServerCommandEntity(UUID.randomUUID().toString(), serverId,
                         template.name(), template.description(), template.commandText(),
                         "[]", ServerCommandRisk.NORMAL, true, template.sortOrder()))
                 .forEach(repository::insertCommand);
     }
 
-    private ServerDefinition definition(String id, ServerConfigurationRequest request,
-                                        ServerAuthenticationType authenticationType,
-                                        String encryptedCredential, String encryptedPassphrase) {
-        return new ServerDefinition(id, request.name().trim(), request.host().trim(),
+    private ServerEntity definition(String id, ServerConfigurationRequest request,
+                                    ServerAuthenticationType authenticationType,
+                                    String encryptedCredential, String encryptedPassphrase) {
+        return new ServerEntity(id, request.name().trim(), request.host().trim(),
                 request.port() == null ? 22 : request.port(), request.username().trim(), authenticationType,
                 encryptedCredential, encryptedPassphrase, normalizeHostKey(request.hostKey()),
                 request.enabled() == null || request.enabled());
     }
 
-    private ServerCommandDefinition commandDefinition(String id, String serverId, ServerCommandRequest request) {
+    private ServerCommandEntity commandDefinition(String id, String serverId, ServerCommandRequest request) {
         String commandText = request.commandText().trim();
         if (commandText.indexOf('\0') >= 0) throw new IllegalArgumentException("命令内容不能包含空字符");
         String parameterSchema = templateService.normalizeSchema(commandText, request.parameterSchema());
-        return new ServerCommandDefinition(id, serverId, request.name().trim(), request.description().trim(),
+        return new ServerCommandEntity(id, serverId, request.name().trim(), request.description().trim(),
                 commandText, parameterSchema, ServerCommandRisk.parse(request.riskLevel()),
                 request.enabled() == null || request.enabled(), request.sortOrder() == null ? 0 : request.sortOrder());
     }
@@ -251,10 +251,10 @@ public class ServerConfigurationService {
         return line;
     }
 
-    private ServerCommandView toView(ServerCommandDefinition command) {
-        return new ServerCommandView(command.id(), command.serverId(), command.name(), command.description(),
-                command.commandText(), command.parameterSchema(), command.riskLevel().name(),
-                command.enabled(), command.sortOrder());
+    private ServerCommandView toView(ServerCommandEntity command) {
+        return new ServerCommandView(command.getId(), command.getServerId(), command.getName(), command.getDescription(),
+                command.getCommandText(), command.getParameterSchema(), command.getRiskLevel().name(),
+                command.isEnabled(), command.getSortOrder());
     }
 
     private record DefaultCommand(String name, String description, String commandText, int sortOrder) { }

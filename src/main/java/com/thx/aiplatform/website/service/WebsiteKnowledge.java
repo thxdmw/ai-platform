@@ -1,6 +1,6 @@
 package com.thx.aiplatform.website.service;
 
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntry;
+import com.thx.aiplatform.website.entity.WebsiteKnowledgeEntryEntity;
 import com.thx.aiplatform.website.repository.WebsiteKnowledgeRepository;
 import org.springframework.stereotype.Component;
 
@@ -35,10 +35,10 @@ public class WebsiteKnowledge {
                 .map(entry -> new ScoredEntry(entry, score(entry, normalizedQuery, queryBigrams)))
                 .sorted(Comparator.comparingInt(ScoredEntry::score).reversed()
                         .thenComparing(Comparator.comparingInt(
-                                (ScoredEntry item) -> item.entry().priority()).reversed()))
+                                (ScoredEntry item) -> item.entry().getPriority()).reversed()))
                 .toList();
 
-        List<WebsiteKnowledgeEntry> selected = scored.stream()
+        List<WebsiteKnowledgeEntryEntity> selected = scored.stream()
                 .filter(item -> item.score() >= 8)
                 .limit(MAX_ENTRIES)
                 .map(ScoredEntry::entry)
@@ -50,11 +50,11 @@ public class WebsiteKnowledge {
         return renderWithinBudget(selected);
     }
 
-    private int score(WebsiteKnowledgeEntry entry, String query, Set<String> queryBigrams) {
-        String title = normalize(entry.title());
-        String question = normalize(entry.question());
-        String keywords = normalize(entry.keywords());
-        String content = normalize(entry.content());
+    private int score(WebsiteKnowledgeEntryEntity entry, String query, Set<String> queryBigrams) {
+        String title = normalize(entry.getTitle());
+        String question = normalize(entry.getQuestion());
+        String keywords = normalize(entry.getKeywords());
+        String content = normalize(entry.getContent());
         int score = 0;
         if (!query.isEmpty() && question.equals(query)) score += 120;
         if (!query.isEmpty() && title.contains(query)) score += 50;
@@ -83,12 +83,12 @@ public class WebsiteKnowledge {
         return values;
     }
 
-    private String renderWithinBudget(List<WebsiteKnowledgeEntry> entries) {
+    private String renderWithinBudget(List<WebsiteKnowledgeEntryEntity> entries) {
         StringBuilder context = new StringBuilder();
-        for (WebsiteKnowledgeEntry entry : entries) {
-            String block = entry.entryType().name().equals("FAQ")
-                    ? "[FAQ] %s\n问：%s\n答：%s\n\n".formatted(entry.title(), entry.question(), entry.content())
-                    : "[资料] %s\n%s\n\n".formatted(entry.title(), entry.content());
+        for (WebsiteKnowledgeEntryEntity entry : entries) {
+            String block = entry.getEntryType().name().equals("FAQ")
+                    ? "[FAQ] %s\n问：%s\n答：%s\n\n".formatted(entry.getTitle(), entry.getQuestion(), entry.getContent())
+                    : "[资料] %s\n%s\n\n".formatted(entry.getTitle(), entry.getContent());
             int remaining = MAX_CONTEXT_CHARACTERS - context.length();
             if (remaining <= 0) break;
             if (block.length() > remaining) {
@@ -106,6 +106,6 @@ public class WebsiteKnowledge {
         return normalized.replaceAll("[\\p{P}\\p{S}\\s]+", "");
     }
 
-    private record ScoredEntry(WebsiteKnowledgeEntry entry, int score) {
+    private record ScoredEntry(WebsiteKnowledgeEntryEntity entry, int score) {
     }
 }

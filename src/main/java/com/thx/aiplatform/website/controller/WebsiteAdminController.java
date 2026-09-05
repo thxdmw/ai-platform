@@ -1,9 +1,9 @@
 package com.thx.aiplatform.website.controller;
 
-import com.thx.aiplatform.website.model.WebsiteAssistantSettings;
-import com.thx.aiplatform.website.model.WebsiteAssistantSettingsRequest;
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntry;
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryRequest;
+import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
+import com.thx.aiplatform.website.dto.WebsiteAssistantSettingsRequest;
+import com.thx.aiplatform.website.entity.WebsiteKnowledgeEntryEntity;
+import com.thx.aiplatform.website.dto.WebsiteKnowledgeEntryRequest;
 import com.thx.aiplatform.website.repository.WebsiteKnowledgeRepository;
 import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
 import jakarta.validation.Valid;
@@ -41,27 +41,27 @@ class WebsiteAdminController {
     }
 
     @GetMapping("/settings")
-    WebsiteAssistantSettings settings() {
+    WebsiteAssistantSettingsEntity settings() {
         return settingsRepository.get();
     }
 
     @PutMapping("/settings")
-    WebsiteAssistantSettings updateSettings(@Valid @RequestBody WebsiteAssistantSettingsRequest request) {
+    WebsiteAssistantSettingsEntity updateSettings(@Valid @RequestBody WebsiteAssistantSettingsRequest request) {
         return settingsRepository.update(request);
     }
 
     @GetMapping("/knowledge")
-    List<WebsiteKnowledgeEntry> knowledge() {
+    List<WebsiteKnowledgeEntryEntity> knowledge() {
         return knowledgeRepository.findAll();
     }
 
     @PostMapping("/knowledge")
-    WebsiteKnowledgeEntry create(@Valid @RequestBody WebsiteKnowledgeEntryRequest request) {
+    WebsiteKnowledgeEntryEntity create(@Valid @RequestBody WebsiteKnowledgeEntryRequest request) {
         return knowledgeRepository.create(request);
     }
 
     @PutMapping("/knowledge/{id}")
-    WebsiteKnowledgeEntry update(@PathVariable long id, @Valid @RequestBody WebsiteKnowledgeEntryRequest request) {
+    WebsiteKnowledgeEntryEntity update(@PathVariable long id, @Valid @RequestBody WebsiteKnowledgeEntryRequest request) {
         return knowledgeRepository.update(id, request);
     }
 

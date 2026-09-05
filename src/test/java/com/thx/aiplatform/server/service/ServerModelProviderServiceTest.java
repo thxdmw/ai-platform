@@ -1,9 +1,9 @@
 package com.thx.aiplatform.server.service;
 
 import com.thx.aiplatform.platform.AssistantModelConnection;
-import com.thx.aiplatform.server.model.ServerModelOptionRequest;
-import com.thx.aiplatform.server.model.ServerModelProviderRequest;
-import com.thx.aiplatform.server.model.ServerModelProviderView;
+import com.thx.aiplatform.server.dto.ServerModelOptionRequest;
+import com.thx.aiplatform.server.dto.ServerModelProviderRequest;
+import com.thx.aiplatform.server.vo.ServerModelProviderView;
 import com.thx.aiplatform.server.repository.ServerModelProviderRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,7 +27,7 @@ class ServerModelProviderServiceTest {
                 "coding-plan", "Coding 套餐", "https://coding.example.com/", "openai-completions", "sk-secret", true,
                 List.of(new ServerModelOptionRequest("Coder", "coder-model", "high", true, 0))));
 
-        assertThat(repository.findProvider(provider.id()).orElseThrow().apiKeyCiphertext())
+        assertThat(repository.findProvider(provider.id()).orElseThrow().getApiKeyCiphertext())
                 .startsWith("v1:").doesNotContain("sk-secret");
         assertThat(provider.apiKeyConfigured()).isTrue();
         assertThat(provider.toString()).doesNotContain("sk-secret");

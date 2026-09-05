@@ -2,9 +2,9 @@ package com.thx.aiplatform.server.controller;
 
 import com.thx.aiplatform.platform.AssistantStreamEvent;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
-import com.thx.aiplatform.server.model.PendingServerOperationView;
-import com.thx.aiplatform.server.model.ServerChatRequest;
-import com.thx.aiplatform.server.model.ServerContinuationRequest;
+import com.thx.aiplatform.server.vo.PendingServerOperationView;
+import com.thx.aiplatform.server.dto.ServerChatRequest;
+import com.thx.aiplatform.server.dto.ServerContinuationRequest;
 import com.thx.aiplatform.server.service.ServerAssistantService;
 import com.thx.aiplatform.server.service.ServerCommandProposalService;
 import com.thx.aiplatform.server.service.ServerOperationService;

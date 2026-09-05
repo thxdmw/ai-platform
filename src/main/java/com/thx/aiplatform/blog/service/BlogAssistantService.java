@@ -1,7 +1,7 @@
 package com.thx.aiplatform.blog.service;
 import com.thx.aiplatform.blog.tool.BlogQueryTools;
 import com.thx.aiplatform.blog.tool.BlogPublicationTool;
-import com.thx.aiplatform.blog.model.BlogChatRequest;
+import com.thx.aiplatform.blog.dto.BlogChatRequest;
 
 import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;

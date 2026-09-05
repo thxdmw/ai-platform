@@ -1,6 +1,6 @@
 package com.thx.aiplatform.website.repository;
 
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryRequest;
+import com.thx.aiplatform.website.dto.WebsiteKnowledgeEntryRequest;
 import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryType;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,15 +23,15 @@ class WebsiteKnowledgeRepositoryTest {
                 WebsiteKnowledgeEntryType.FAQ, "联系站长", "如何联系站长？",
                 "请使用首页的联系入口。", "联系,站长", true, 80));
 
-        var updated = repository.update(created.id(), new WebsiteKnowledgeEntryRequest(
+        var updated = repository.update(created.getId(), new WebsiteKnowledgeEntryRequest(
                 WebsiteKnowledgeEntryType.FAQ, "联系方式", "怎样联系站长？",
                 "请查看首页联系卡片。", "联系,站长", false, 90));
 
-        assertThat(updated.title()).isEqualTo("联系方式");
-        assertThat(updated.enabled()).isFalse();
-        assertThat(updated.priority()).isEqualTo(90);
+        assertThat(updated.getTitle()).isEqualTo("联系方式");
+        assertThat(updated.isEnabled()).isFalse();
+        assertThat(updated.getPriority()).isEqualTo(90);
 
-        repository.delete(created.id());
-        assertThat(repository.findById(created.id())).isEmpty();
+        repository.delete(created.getId());
+        assertThat(repository.findById(created.getId())).isEmpty();
     }
 }

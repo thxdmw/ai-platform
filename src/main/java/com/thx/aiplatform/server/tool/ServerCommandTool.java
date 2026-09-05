@@ -5,11 +5,11 @@ import com.thx.aiplatform.server.service.ServerConfigurationService;
 import com.thx.aiplatform.server.service.ServerCommandProposalService;
 import com.thx.aiplatform.server.service.ServerCommandTemplateService;
 import com.thx.aiplatform.server.service.ServerTemporaryCommandService;
-import com.thx.aiplatform.server.model.ServerDefinition;
+import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
-import com.thx.aiplatform.server.model.ServerCommandDefinition;
-import com.thx.aiplatform.server.model.PendingServerOperationView;
-import com.thx.aiplatform.server.model.PendingServerCommandProposalView;
+import com.thx.aiplatform.server.entity.ServerCommandEntity;
+import com.thx.aiplatform.server.vo.PendingServerOperationView;
+import com.thx.aiplatform.server.vo.PendingServerCommandProposalView;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,7 +34,7 @@ public final class ServerCommandTool {
     private static final Logger log = LoggerFactory.getLogger(ServerCommandTool.class);
 
     private final String conversationId;
-    private final ServerDefinition server;
+    private final ServerEntity server;
     private final ServerConfigurationService configurationService;
     private final ServerOperationService operationService;
     private final ServerCommandProposalService commandProposalService;
@@ -43,7 +43,7 @@ public final class ServerCommandTool {
     private final ServerCommandTemplateService templateService;
     private final ServerTemporaryCommandService temporaryCommandService;
 
-    public ServerCommandTool(String conversationId, ServerDefinition server,
+    public ServerCommandTool(String conversationId, ServerEntity server,
                       ServerConfigurationService configurationService,
                       ServerOperationService operationService, ServerCommandProposalService commandProposalService,
                       SshCommandExecutor executor,
@@ -72,7 +72,7 @@ public final class ServerCommandTool {
             @ToolParam(description = "本步骤要验证或改变什么，以及为何需要执行") String reason
     ) {
         log.info("模型调用服务器工具，tool=executeTemporaryCommand，conversationId={}，serverId={}",
-                conversationId, server.id());
+                conversationId, server.getId());
         commandProposalService.cancelForConversation(conversationId);
         return temporaryCommandService.executeOrPrepare(
                 conversationId, server, commandText, workingDirectory, reason);
@@ -85,11 +85,11 @@ public final class ServerCommandTool {
      */
     @Tool(description = "列出当前对话所选服务器允许执行的命令。只使用返回的命令 ID；没有匹配命令时必须继续调用 proposeCommand，不能只用文字询问是否添加")
     public String listCommands() {
-        log.info("模型调用服务器工具，tool=listCommands，conversationId={}，serverId={}", conversationId, server.id());
-        List<Map<String, Object>> commands = configurationService.enabledCommands(server.id()).stream()
+        log.info("模型调用服务器工具，tool=listCommands，conversationId={}，serverId={}", conversationId, server.getId());
+        List<Map<String, Object>> commands = configurationService.enabledCommands(server.getId()).stream()
                 .map(command -> Map.<String, Object>of(
-                        "id", command.id(), "name", command.name(), "description", command.description(),
-                        "riskLevel", command.riskLevel().name(),
+                        "id", command.getId(), "name", command.getName(), "description", command.getDescription(),
+                        "riskLevel", command.getRiskLevel().name(),
                         "parameters", templateService.parameters(command)))
                 .toList();
         Map<String, Object> result = Map.of(
@@ -112,10 +112,10 @@ public final class ServerCommandTool {
             @ToolParam(description = "为什么需要执行，以及已有的判断依据") String reason
     ) {
         log.info("模型调用服务器工具，tool=executeCommand，conversationId={}，serverId={}，commandId={}",
-                conversationId, server.id(), commandId);
-        ServerCommandDefinition command = configurationService.requireEnabledCommand(server.id(), commandId);
+                conversationId, server.getId(), commandId);
+        ServerCommandEntity command = configurationService.requireEnabledCommand(server.getId(), commandId);
         String renderedCommand = templateService.render(command, argumentsJson);
-        if (command.riskLevel() == ServerCommandRisk.DANGEROUS) {
+        if (command.getRiskLevel() == ServerCommandRisk.DANGEROUS) {
             commandProposalService.cancelForConversation(conversationId);
             PendingServerOperationView pending = operationService.prepare(
                     conversationId, server, command, renderedCommand, reason);
@@ -124,7 +124,7 @@ public final class ServerCommandTool {
         }
         String result = executor.execute(server, renderedCommand).forModel();
         log.info("服务器工具执行完成，conversationId={}，serverId={}，commandId={}",
-                conversationId, server.id(), commandId);
+                conversationId, server.getId(), commandId);
         return result;
     }
 
@@ -141,7 +141,7 @@ public final class ServerCommandTool {
             @ToolParam(description = "为什么当前任务需要添加这条命令") String reason
     ) {
         log.info("模型调用服务器工具，tool=proposeCommand，conversationId={}，serverId={}，name={}",
-                conversationId, server.id(), name);
+                conversationId, server.getId(), name);
         operationService.cancelForConversation(conversationId);
         PendingServerCommandProposalView pending = commandProposalService.prepare(
                 conversationId, server, name, description, commandText, parameterSchema, reason);

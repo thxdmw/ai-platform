@@ -1,7 +1,7 @@
 package com.thx.aiplatform.server.service;
 
 import com.sun.net.httpserver.HttpServer;
-import com.thx.aiplatform.server.model.ServerModelProviderProbeRequest;
+import com.thx.aiplatform.server.dto.ServerModelProviderProbeRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;

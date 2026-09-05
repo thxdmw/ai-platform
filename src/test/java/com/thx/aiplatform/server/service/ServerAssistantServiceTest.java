@@ -1,6 +1,6 @@
 package com.thx.aiplatform.server.service;
-import com.thx.aiplatform.server.model.ServerDefinition;
-import com.thx.aiplatform.server.model.ServerContinuationRequest;
+import com.thx.aiplatform.server.entity.ServerEntity;
+import com.thx.aiplatform.server.dto.ServerContinuationRequest;
 import com.thx.aiplatform.server.model.ServerAuthenticationType;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,7 +23,7 @@ class ServerAssistantServiceTest {
     void 动作完成后使用服务端续跑消息恢复同一模型会话() {
         AssistantChatGateway chatGateway = mock(AssistantChatGateway.class);
         ServerRegistry registry = mock(ServerRegistry.class);
-        ServerDefinition server = new ServerDefinition("server-a", "服务器 A", "host", 22, "ops",
+        ServerEntity server = new ServerEntity("server-a", "服务器 A", "host", 22, "ops",
                 ServerAuthenticationType.PASSWORD, "ciphertext", null, "host ssh-ed25519 AAAATESTKEY", true);
         when(registry.requireEnabled("server-a")).thenReturn(server);
         when(chatGateway.streamEvents(any(AssistantChatCommand.class), any(Object[].class))).thenReturn(Flux.empty());

@@ -1,7 +1,7 @@
 package com.thx.aiplatform.blog.tool;
 import com.thx.aiplatform.blog.service.BlogPublicationService;
-import com.thx.aiplatform.blog.model.PendingPublicationView;
-import com.thx.aiplatform.blog.model.BlogPublicationRequest;
+import com.thx.aiplatform.blog.vo.PendingPublicationView;
+import com.thx.aiplatform.blog.dto.BlogPublicationRequest;
 
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;

@@ -1,13 +1,13 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.model.SshExecutionResult;
-import com.thx.aiplatform.server.model.ServerOperationResult;
-import com.thx.aiplatform.server.model.ServerOperationDecisionRequest;
-import com.thx.aiplatform.server.model.ServerOperationDecisionResult;
-import com.thx.aiplatform.server.model.ServerDefinition;
+import com.thx.aiplatform.server.vo.ServerOperationResult;
+import com.thx.aiplatform.server.dto.ServerOperationDecisionRequest;
+import com.thx.aiplatform.server.vo.ServerOperationDecisionResult;
+import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
-import com.thx.aiplatform.server.model.ServerCommandDefinition;
+import com.thx.aiplatform.server.entity.ServerCommandEntity;
 import com.thx.aiplatform.server.model.ServerAuthenticationType;
-import com.thx.aiplatform.server.model.PendingServerOperationView;
+import com.thx.aiplatform.server.vo.PendingServerOperationView;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
 
 import org.junit.jupiter.api.Test;
@@ -33,9 +33,9 @@ class ServerOperationServiceTest {
     @Test
     void 危险命令必须经过确认且只能执行一次() {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
-        ServerDefinition server = server();
-        ServerCommandDefinition command = dangerousCommand();
-        when(executor.execute(same(server), eq(command.commandText())))
+        ServerEntity server = server();
+        ServerCommandEntity command = dangerousCommand();
+        when(executor.execute(same(server), eq(command.getCommandText())))
                 .thenReturn(new SshExecutionResult("server-a", 0, "active", "", 120, false));
         ServerActionContinuationService continuationService = continuationService();
         ServerOperationService service = new ServerOperationService(executor, properties(), continuationService,
@@ -47,7 +47,7 @@ class ServerOperationServiceTest {
         ServerOperationResult result = service.approve(pending.actionId());
         assertThat(result.success()).isTrue();
         assertThat(result.continuationId()).isEqualTo("continuation-1");
-        verify(executor).execute(same(server), eq(command.commandText()));
+        verify(executor).execute(same(server), eq(command.getCommandText()));
         assertThatThrownBy(() -> service.approve(pending.actionId())).hasMessageContaining("不存在或已处理");
     }
 
@@ -56,7 +56,7 @@ class ServerOperationServiceTest {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
         ServerOperationService service = new ServerOperationService(
                 executor, properties(), continuationService(), Clock.systemUTC());
-        ServerCommandDefinition command = new ServerCommandDefinition(
+        ServerCommandEntity command = new ServerCommandEntity(
                 "command-2", "server-a", "查看状态", "查看状态", "uptime", "[]", ServerCommandRisk.NORMAL, true, 0);
 
         assertThatThrownBy(() -> service.prepare("conversation-1", server(), command, "检查"))
@@ -67,9 +67,9 @@ class ServerOperationServiceTest {
     @Test
     void 连接异常时消费操作并提示先核对实际状态() {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
-        ServerDefinition server = server();
-        ServerCommandDefinition command = dangerousCommand();
-        when(executor.execute(same(server), eq(command.commandText())))
+        ServerEntity server = server();
+        ServerCommandEntity command = dangerousCommand();
+        when(executor.execute(same(server), eq(command.getCommandText())))
                 .thenThrow(new IllegalStateException("连接中断"));
         ServerOperationService service = new ServerOperationService(executor, properties(), continuationService(),
                 Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
@@ -106,7 +106,7 @@ class ServerOperationServiceTest {
     @Test
     void 仅在临时命令成功后记住完全相同的命令和目录() {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
-        ServerDefinition server = server();
+        ServerEntity server = server();
         when(executor.execute(same(server), eq("cd -- '/srv/app' && systemctl restart api")))
                 .thenReturn(new SshExecutionResult("server-a", 0, "", "", 50, false));
         ServerOperationService service = new ServerOperationService(executor, properties(), continuationService(),
@@ -123,13 +123,13 @@ class ServerOperationServiceTest {
         assertThat(service.isTrustedExact("conversation-1", "server-a", "/srv/other", "systemctl restart api")).isFalse();
     }
 
-    private ServerDefinition server() {
-        return new ServerDefinition("server-a", "服务器 A", "host", 22, "ops", ServerAuthenticationType.PASSWORD,
+    private ServerEntity server() {
+        return new ServerEntity("server-a", "服务器 A", "host", 22, "ops", ServerAuthenticationType.PASSWORD,
                 "ciphertext", null, "host ssh-ed25519 AAAATESTKEY", true);
     }
 
-    private ServerCommandDefinition dangerousCommand() {
-        return new ServerCommandDefinition("command-1", "server-a", "重启服务", "重启服务",
+    private ServerCommandEntity dangerousCommand() {
+        return new ServerCommandEntity("command-1", "server-a", "重启服务", "重启服务",
                 "sudo -n systemctl restart nginx", "[]", ServerCommandRisk.DANGEROUS, true, 0);
     }
 

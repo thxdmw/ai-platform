@@ -1,6 +1,6 @@
 package com.thx.aiplatform.website.controller;
 import com.thx.aiplatform.website.service.WebsiteAssistantService;
-import com.thx.aiplatform.website.model.WebsiteChatRequest;
+import com.thx.aiplatform.website.dto.WebsiteChatRequest;
 import com.thx.aiplatform.website.config.WebsiteAssistantProperties;
 
 import jakarta.validation.Valid;

@@ -1,5 +1,5 @@
 package com.thx.aiplatform.blog.service;
-import com.thx.aiplatform.blog.model.BlogPublicationRequest;
+import com.thx.aiplatform.blog.dto.BlogPublicationRequest;
 import com.thx.aiplatform.blog.config.BlogAssistantProperties;
 
 import com.fasterxml.jackson.core.JsonProcessingException;

@@ -1,8 +1,8 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.tool.ServerCommandTool;
-import com.thx.aiplatform.server.model.ServerDefinition;
-import com.thx.aiplatform.server.model.ServerContinuationRequest;
-import com.thx.aiplatform.server.model.ServerChatRequest;
+import com.thx.aiplatform.server.entity.ServerEntity;
+import com.thx.aiplatform.server.dto.ServerContinuationRequest;
+import com.thx.aiplatform.server.dto.ServerChatRequest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thx.aiplatform.platform.AssistantChatCommand;
@@ -80,8 +80,8 @@ public class ServerAssistantService {
      * 误点；同时把会话绑定到这台服务器（同一对话不允许切换服务器）。
      */
     public Flux<AssistantStreamEvent> stream(ServerChatRequest request) {
-        ServerDefinition server = registry.requireEnabled(request.serverId());
-        conversationBindingService.bind(request.conversationId(), server.id());
+        ServerEntity server = registry.requireEnabled(request.serverId());
+        conversationBindingService.bind(request.conversationId(), server.getId());
         operationService.cancelForConversation(request.conversationId());
         commandProposalService.cancelForConversation(request.conversationId());
         continuationService.cancelForConversation(request.conversationId());
@@ -93,10 +93,10 @@ public class ServerAssistantService {
      * 签发的续跑凭证，用其中的「系统可信事件」消息恢复模型会话继续原任务。
      */
     public Flux<AssistantStreamEvent> continueAfterAction(ServerContinuationRequest request) {
-        ServerDefinition server = registry.requireEnabled(request.serverId());
-        conversationBindingService.bind(request.conversationId(), server.id());
+        ServerEntity server = registry.requireEnabled(request.serverId());
+        conversationBindingService.bind(request.conversationId(), server.getId());
         String continuationMessage = continuationService.consume(
-                request.continuationId(), request.conversationId(), server.id());
+                request.continuationId(), request.conversationId(), server.getId());
         return stream(request.conversationId(), server, continuationMessage, request.modelId(), request.reasoningEffort());
     }
 
@@ -104,11 +104,11 @@ public class ServerAssistantService {
      * 构造模型命令与本次对话的工具集后转发聊天网关。服务器上下文拼进 system prompt，
      * 让模型始终知道自己在为哪台服务器工作且无权自行更换。
      */
-    private Flux<AssistantStreamEvent> stream(String conversationId, ServerDefinition server, String message, String modelId,
+    private Flux<AssistantStreamEvent> stream(String conversationId, ServerEntity server, String message, String modelId,
                                               String reasoningEffort) {
         AssistantChatCommand command = new AssistantChatCommand(
                 ASSISTANT_ID, conversationId,
-                SYSTEM_PROMPT + "\n当前服务器：" + server.name() + "（" + server.id() + "，" + server.host() + ":" + server.port() + "）",
+                SYSTEM_PROMPT + "\n当前服务器：" + server.getName() + "（" + server.getId() + "，" + server.getHost() + ":" + server.getPort() + "）",
                 message, modelProviderService.resolve(modelId, reasoningEffort));
         ServerCommandTool tools = new ServerCommandTool(conversationId, server, configurationService,
                 operationService, commandProposalService, executor, objectMapper, commandTemplateService,

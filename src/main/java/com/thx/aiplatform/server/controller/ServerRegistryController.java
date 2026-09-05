@@ -1,10 +1,10 @@
 package com.thx.aiplatform.server.controller;
 import com.thx.aiplatform.server.service.ServerConfigurationService;
-import com.thx.aiplatform.server.model.ServerView;
-import com.thx.aiplatform.server.model.ServerConnectionTestResult;
-import com.thx.aiplatform.server.model.ServerConfigurationRequest;
-import com.thx.aiplatform.server.model.ServerCommandView;
-import com.thx.aiplatform.server.model.ServerCommandRequest;
+import com.thx.aiplatform.server.vo.ServerView;
+import com.thx.aiplatform.server.vo.ServerConnectionTestResult;
+import com.thx.aiplatform.server.dto.ServerConfigurationRequest;
+import com.thx.aiplatform.server.vo.ServerCommandView;
+import com.thx.aiplatform.server.dto.ServerCommandRequest;
 
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;

@@ -1,13 +1,13 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.security.ServerCredentialCipher;
 import com.thx.aiplatform.server.repository.ServerConfigurationRepository;
-import com.thx.aiplatform.server.model.ServerView;
-import com.thx.aiplatform.server.model.ServerDefinition;
-import com.thx.aiplatform.server.model.ServerConfigurationRequest;
-import com.thx.aiplatform.server.model.ServerCommandView;
+import com.thx.aiplatform.server.vo.ServerView;
+import com.thx.aiplatform.server.entity.ServerEntity;
+import com.thx.aiplatform.server.dto.ServerConfigurationRequest;
+import com.thx.aiplatform.server.vo.ServerCommandView;
 import com.thx.aiplatform.server.model.ServerCommandRisk;
-import com.thx.aiplatform.server.model.ServerCommandRequest;
-import com.thx.aiplatform.server.model.ServerCommandDefinition;
+import com.thx.aiplatform.server.dto.ServerCommandRequest;
+import com.thx.aiplatform.server.entity.ServerCommandEntity;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,12 +33,12 @@ class ServerConfigurationServiceTest {
         ServerCommandView command = service.createCommand(server.id(), new ServerCommandRequest(
                 "查看运行时间", "查看服务器运行时间", "uptime", "[]", "NORMAL", true, 10));
 
-        ServerDefinition stored = repository.findServer(server.id()).orElseThrow();
-        assertThat(stored.credentialCiphertext()).doesNotContain("very-secret").startsWith("v1:");
-        assertThat(new String(credentialCipher.decrypt(stored.credentialCiphertext()))).isEqualTo("very-secret");
-        assertThat(repository.findCommands(server.id(), false)).extracting(ServerCommandDefinition::id)
+        ServerEntity stored = repository.findServer(server.id()).orElseThrow();
+        assertThat(stored.getCredentialCiphertext()).doesNotContain("very-secret").startsWith("v1:");
+        assertThat(new String(credentialCipher.decrypt(stored.getCredentialCiphertext()))).isEqualTo("very-secret");
+        assertThat(repository.findCommands(server.id(), false)).extracting(ServerCommandEntity::getId)
                 .contains(command.id());
-        assertThat(repository.findCommands(server.id(), false)).extracting(ServerCommandDefinition::name)
+        assertThat(repository.findCommands(server.id(), false)).extracting(ServerCommandEntity::getName)
                 .contains("系统概览", "CPU 与内存", "磁盘使用", "高资源进程", "最近系统告警", "Docker 容器状态");
         assertThat(service.listServers()).singleElement().satisfies(view -> {
             assertThat(view.name()).isEqualTo("服务器 A");
@@ -51,13 +51,13 @@ class ServerConfigurationServiceTest {
         ServerView server = service.createServer(new ServerConfigurationRequest(
                 "服务器 A", "127.0.0.1", 22, "ops", "PASSWORD", "original-secret", null,
                 "127.0.0.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestHostKeyMaterial", true));
-        String before = repository.findServer(server.id()).orElseThrow().credentialCiphertext();
+        String before = repository.findServer(server.id()).orElseThrow().getCredentialCiphertext();
 
         service.updateServer(server.id(), new ServerConfigurationRequest(
                 "服务器 A-修改", "127.0.0.1", 22, "ops", "PASSWORD", null, null,
                 "127.0.0.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestHostKeyMaterial", true));
 
-        assertThat(repository.findServer(server.id()).orElseThrow().credentialCiphertext()).isEqualTo(before);
+        assertThat(repository.findServer(server.id()).orElseThrow().getCredentialCiphertext()).isEqualTo(before);
     }
 
     @Test
@@ -72,8 +72,8 @@ class ServerConfigurationServiceTest {
         assertThat(repository.findCommands(server.id(), false))
                 .hasSize(6)
                 .allSatisfy(command -> {
-                    assertThat(command.riskLevel()).isEqualTo(ServerCommandRisk.NORMAL);
-                    assertThat(command.enabled()).isTrue();
+                    assertThat(command.getRiskLevel()).isEqualTo(ServerCommandRisk.NORMAL);
+                    assertThat(command.isEnabled()).isTrue();
                 });
     }
 }
