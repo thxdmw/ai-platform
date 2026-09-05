@@ -6,55 +6,346 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <title>AI助手平台</title>
     <style>
-        :root { color-scheme: light; --text: #172033; --muted: #627086; --line: rgba(112,134,166,.18); --accent: #2563eb; }
-        * { box-sizing: border-box; }
-        body { min-height: 100vh; margin: 0; color: var(--text); background: linear-gradient(145deg,#e9eef7 0%,#f7faff 46%,#eef5ff 100%); font-family: ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; }
-        body::before { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(circle at 12% 12%,rgba(96,165,250,.18),transparent 32%),radial-gradient(circle at 88% 80%,rgba(129,140,248,.14),transparent 34%); content: ""; }
-        main { position: relative; width: min(1080px,calc(100% - 40px)); margin: 0 auto; padding: clamp(64px,10vw,120px) 0 56px; }
-        .eyebrow { margin: 0 0 14px; color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
-        h1 { max-width: 720px; margin: 0; font-size: clamp(38px,6vw,68px); line-height: 1.06; letter-spacing: -.045em; }
-        .lead { max-width: 650px; margin: 22px 0 42px; color: var(--muted); font-size: clamp(16px,2vw,19px); line-height: 1.75; }
-        .assistant-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap: 18px; }
-        .assistant-card { position: relative; display: flex; min-height: 250px; flex-direction: column; padding: 26px; border: 1px solid rgba(255,255,255,.82); border-radius: 22px; color: inherit; background: rgba(255,255,255,.66); box-shadow: 0 18px 48px rgba(61,78,110,.09); text-decoration: none; backdrop-filter: blur(18px); transition: transform .2s,box-shadow .2s,border-color .2s; }
-        .assistant-card[href]:hover { transform: translateY(-5px); border-color: rgba(96,132,190,.32); box-shadow: 0 24px 58px rgba(48,72,112,.14); }
-        .card-icon { display: grid; width: 48px; height: 48px; place-items: center; border-radius: 15px; color: #fff; background: linear-gradient(135deg,#2563eb,#60a5fa); font-size: 18px; font-weight: 750; box-shadow: 0 10px 24px rgba(37,99,235,.22); }
-        .blog .card-icon { background: linear-gradient(135deg,#111827,#4b5563); box-shadow: 0 10px 24px rgba(17,24,39,.2); }
-        .server .card-icon { background: linear-gradient(135deg,#0f766e,#2dd4bf); box-shadow: 0 10px 24px rgba(13,148,136,.2); }
-        .assistant-card h2 { margin: 26px 0 8px; font-size: 20px; }
-        .assistant-card p { margin: 0; color: var(--muted); line-height: 1.65; }
-        .card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 24px; color: var(--accent); font-size: 13px; font-weight: 650; }
-        .server .card-footer { color: #0f766e; }
-        .status { padding: 5px 8px; border-radius: 999px; color: #687386; background: rgba(123,137,158,.12); font-size: 11px; font-weight: 600; }
-        footer { margin-top: 30px; color: #8390a3; font-size: 12px; }
-        @media (max-width:600px) { main { width: min(100% - 28px,1080px); padding-top: 48px; } .lead { margin-bottom: 30px; } .assistant-card { min-height: 220px; } }
+        :root{--text:#203650;--muted:#657b94;--sky-top:#8ed1ff;--sky-middle:#c9eaff;--sky-bottom:#f3f9ff;--gold:#f6d98b;--white:#fff}
+        *{box-sizing:border-box}
+        html,body{margin:0;width:100%;height:100%;overflow:auto}
+        body{min-height:100vh;color:var(--text);font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:linear-gradient(180deg,var(--sky-top) 0%,var(--sky-middle) 42%,var(--sky-bottom) 100%)}
+        button{font:inherit}
+        ::-webkit-scrollbar{display:none}
+        html{scrollbar-width:none;-ms-overflow-style:none}
+        .page{position:relative;min-height:100vh;overflow:visible;isolation:isolate}
+        .background{position:fixed;inset:0;z-index:-10;overflow:hidden;pointer-events:none}
+        .sun-glow{position:absolute;top:-500px;left:50%;width:1150px;height:1150px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.95) 0%,rgba(255,255,255,.5) 20%,rgba(123,198,255,.16) 50%,transparent 72%);filter:blur(12px)}
+        .sky-aura{position:absolute;inset:-15%;background:radial-gradient(circle at 15% 30%,rgba(93,222,255,.18),transparent 26%),radial-gradient(circle at 86% 28%,rgba(176,141,255,.16),transparent 26%),radial-gradient(circle at 50% 50%,rgba(255,255,255,.2),transparent 34%);animation:auraMove 10s ease-in-out infinite alternate}
+        .cloud{position:absolute;border-radius:50%;background:radial-gradient(ellipse,rgba(255,255,255,.85),rgba(255,255,255,.18) 62%,transparent 74%);filter:blur(13px);opacity:.7}
+        .cloud-1{top:120px;left:-130px;width:520px;height:130px;animation:cloudLeft 28s ease-in-out infinite alternate}
+        .cloud-2{top:260px;right:-160px;width:600px;height:150px;animation:cloudRight 35s ease-in-out infinite alternate}
+        .cloud-3{bottom:80px;left:20%;width:450px;height:110px;opacity:.45;animation:cloudLeft 38s ease-in-out infinite alternate}
+        .particle{position:absolute;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.95);box-shadow:0 0 14px rgba(106,191,255,.8);animation:particleFloat linear infinite}
+        .particle:nth-child(1){left:8%;bottom:10%;animation-duration:11s}
+        .particle:nth-child(2){left:25%;bottom:5%;animation-duration:14s;animation-delay:2s}
+        .particle:nth-child(3){left:46%;bottom:12%;animation-duration:12s;animation-delay:1s}
+        .particle:nth-child(4){left:65%;bottom:3%;animation-duration:15s}
+        .particle:nth-child(5){left:82%;bottom:8%;animation-duration:13s;animation-delay:1.5s}
+        .brand{position:fixed;top:24px;left:28px;z-index:100;display:flex;align-items:center;gap:12px;user-select:none}
+        .brand-logo{position:relative;width:48px;height:48px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.7);border-radius:16px;color:#fff;font-size:15px;font-weight:900;background:linear-gradient(145deg,#80d9ff,#5f92ff 65%,#837aff);box-shadow:0 14px 30px rgba(58,114,193,.22),inset 0 6px 12px rgba(255,255,255,.25)}
+        .brand-logo::after{position:absolute;inset:6px;content:"";border:1px solid rgba(255,255,255,.32);border-radius:11px}
+        .brand-title{margin:0;color:#193651;font-size:19px;font-weight:850;letter-spacing:-.03em}
+        .world{position:relative;width:min(1500px,100vw);min-height:100vh;margin:0 auto;overflow:visible}
+        .route-layer{position:absolute;inset:0;width:100%;height:100%;z-index:10;overflow:visible;pointer-events:none}
+        .route-path{fill:none;stroke:rgba(255,255,255,.92);stroke-width:4;stroke-linecap:round;filter:drop-shadow(0 0 7px rgba(68,171,255,.9));stroke-dasharray:10 12;opacity:0;transition:opacity .25s}
+        .route-path.active{opacity:1;animation:routeFlow .45s linear infinite}
+        .island{position:absolute;width:270px;height:185px;border:0;outline:none;background:transparent;cursor:pointer;transform:translate(-50%,-50%);transform-origin:center center;transition:filter .3s ease}
+        .island:hover{z-index:25}
+        .island-scene{position:relative;width:100%;height:100%;transform:translateY(0) scale(1);transition:transform .3s cubic-bezier(.2,.8,.2,1)}
+        .island:hover .island-scene{transform:translateY(-10px) scale(1.045)}
+        .island.selected .island-scene{animation:islandSelected .55s ease infinite alternate}
+        .island-ground{position:absolute;top:28px;left:50%;width:205px;height:88px;transform:translateX(-50%);border-radius:50%;background:linear-gradient(180deg,var(--grass-light),var(--grass));box-shadow:inset 0 9px 12px rgba(255,255,255,.35),0 14px 28px rgba(53,88,136,.18);z-index:4}
+        .island-ground::before{position:absolute;left:12px;right:12px;bottom:-11px;height:32px;content:"";border-radius:50%;background:linear-gradient(180deg,var(--soil),var(--rock));z-index:-1}
+        .island-rock{position:absolute;top:78px;left:50%;width:165px;height:90px;transform:translateX(-50%);clip-path:polygon(5% 0,95% 0,78% 55%,61% 82%,50% 100%,37% 80%,22% 58%);background:linear-gradient(150deg,var(--rock-light),var(--rock));box-shadow:inset 15px 0 18px rgba(255,255,255,.12);z-index:1}
+        .island-rock::after{position:absolute;inset:15px 38px 28px 35px;content:"";clip-path:polygon(50% 0,95% 100%,0 82%);background:rgba(255,255,255,.08)}
+        .island-shadow{position:absolute;left:50%;bottom:5px;width:160px;height:24px;transform:translateX(-50%);border-radius:50%;background:rgba(65,102,153,.17);filter:blur(12px);z-index:0}
+        .floating-rock{position:absolute;width:22px;height:28px;clip-path:polygon(50% 0,100% 35%,70% 100%,25% 82%,0 32%);background:linear-gradient(145deg,var(--rock-light),var(--rock));opacity:.8;animation:littleRock 3.8s ease-in-out infinite}
+        .floating-rock.r1{left:30px;top:100px}
+        .floating-rock.r2{right:24px;top:120px;width:16px;height:21px;animation-delay:.7s}
+        .assistant-info{position:absolute;left:50%;bottom:-34px;min-width:185px;transform:translateX(-50%);padding:11px 16px;border:1px solid rgba(255,255,255,.72);border-radius:16px;background:rgba(255,255,255,.73);backdrop-filter:blur(12px);box-shadow:0 12px 28px rgba(57,96,143,.14),inset 0 1px 0 rgba(255,255,255,.7);text-align:center;z-index:12;transition:transform .28s ease,box-shadow .28s ease}
+        .island:hover .assistant-info{transform:translateX(-50%) translateY(-4px);box-shadow:0 17px 34px rgba(57,96,143,.2),inset 0 1px 0 rgba(255,255,255,.8)}
+        .assistant-name{margin:0;color:#1c3855;font-size:15px;font-weight:850;white-space:nowrap}
+        .assistant-desc{margin:4px 0 0;color:#6a8199;font-size:11px;white-space:nowrap}
+        .landing-point{position:absolute;top:42px;left:50%;width:14px;height:14px;transform:translateX(-50%);opacity:0;pointer-events:none}
+        .theme-website{--grass-light:#c7f1ff;--grass:#69c3ef;--soil:#6e9bd7;--rock-light:#8fb9ec;--rock:#5577b9;--accent:#5eb9ff;--accent-dark:#527cff}
+        .theme-blog{--grass-light:#e5d7ff;--grass:#b092e9;--soil:#9271d1;--rock-light:#aa92d6;--rock:#7058a8;--accent:#bb91ff;--accent-dark:#7d69e9}
+        .theme-server{--grass-light:#c8ffe6;--grass:#66d4ae;--soil:#64ab9a;--rock-light:#80bbae;--rock:#4c8178;--accent:#55d9ba;--accent-dark:#27a99c}
+        .portal-landmark{position:absolute;top:-10px;left:50%;width:70px;height:85px;transform:translateX(-50%);z-index:8}
+        .portal-ring{position:absolute;top:5px;left:50%;width:62px;height:62px;transform:translateX(-50%);border:8px solid rgba(255,255,255,.85);border-radius:50%;background:radial-gradient(circle,#dff7ff,#68cfff 45%,#527cff 100%);box-shadow:0 0 20px rgba(73,174,255,.65),inset 0 0 18px rgba(255,255,255,.8);animation:portalPulse 2.8s ease-in-out infinite}
+        .portal-ring::after{position:absolute;inset:8px;content:"";border:2px dashed rgba(255,255,255,.86);border-radius:50%;animation:rotateSimple 9s linear infinite}
+        .portal-base{position:absolute;bottom:0;left:50%;width:70px;height:20px;transform:translateX(-50%);border-radius:50% 50% 35% 35%;background:linear-gradient(180deg,#e3f7ff,#7396de);box-shadow:0 7px 12px rgba(56,92,147,.2)}
+        .blog-landmark{position:absolute;top:-11px;left:50%;width:90px;height:94px;transform:translateX(-50%);z-index:8}
+        .magic-tree{position:absolute;top:0;left:50%;width:66px;height:60px;transform:translateX(-50%);border-radius:48% 52% 46% 54%;background:radial-gradient(circle at 35% 30%,#f4eaff,#c69cff 42%,#7e6ce7 100%);box-shadow:0 0 24px rgba(170,125,255,.55),inset 0 7px 12px rgba(255,255,255,.32);animation:treeFloat 3.5s ease-in-out infinite}
+        .magic-tree::before,.magic-tree::after{position:absolute;content:"✦";color:#fffbd4;font-size:11px;text-shadow:0 0 10px #fff}
+        .magic-tree::before{top:9px;left:12px}
+        .magic-tree::after{top:28px;right:12px}
+        .tree-trunk{position:absolute;top:47px;left:50%;width:12px;height:31px;transform:translateX(-50%);border-radius:8px;background:linear-gradient(90deg,#7950ae,#d29bea,#704aa0)}
+        .magic-book{position:absolute;left:50%;bottom:0;width:48px;height:20px;transform:translateX(-50%);border-radius:5px 5px 9px 9px;background:linear-gradient(90deg,#fdf5db 0 48%,#d1bafa 49% 52%,#fdf5db 53%);box-shadow:0 7px 14px rgba(83,54,143,.2)}
+        .server-landmark{position:absolute;top:-12px;left:50%;width:80px;height:98px;transform:translateX(-50%);z-index:8}
+        .server-tower{position:absolute;left:50%;bottom:8px;width:49px;height:68px;transform:translateX(-50%);border:4px solid rgba(235,255,250,.85);border-radius:14px;background:linear-gradient(180deg,#d9fff4,#67d8bd 55%,#299b91);box-shadow:0 0 20px rgba(64,217,182,.45),inset 0 5px 10px rgba(255,255,255,.4)}
+        .server-slot{height:8px;margin:8px 7px 0;border-radius:4px;background:rgba(18,92,91,.45);box-shadow:inset 0 1px 3px rgba(0,0,0,.15)}
+        .server-light{position:absolute;top:12px;right:8px;width:5px;height:5px;border-radius:50%;background:#eaff93;box-shadow:0 0 9px #eaff93;animation:serverBlink 1.5s ease-in-out infinite}
+        .antenna{position:absolute;top:0;left:50%;width:4px;height:26px;transform:translateX(-50%);border-radius:10px;background:#ebfffb}
+        .antenna::before{position:absolute;top:-5px;left:50%;width:13px;height:13px;transform:translateX(-50%);content:"";border-radius:50%;background:#7af7da;box-shadow:0 0 15px rgba(94,248,214,.9)}
+        .hub-island{position:absolute;left:50%;top:48%;width:340px;height:230px;transform:translate(-50%,-50%);z-index:8;pointer-events:none}
+        .hub-ground{position:absolute;top:42px;left:50%;width:270px;height:110px;transform:translateX(-50%);border-radius:50%;background:linear-gradient(180deg,#f6f4d8,#a6d88a);box-shadow:inset 0 12px 18px rgba(255,255,255,.45),0 20px 45px rgba(66,101,145,.2);z-index:5}
+        .hub-ground::before{position:absolute;left:12px;right:12px;bottom:-16px;height:40px;content:"";border-radius:50%;background:linear-gradient(180deg,#8ba18d,#667a84);z-index:-1}
+        .hub-rock{position:absolute;top:108px;left:50%;width:218px;height:112px;transform:translateX(-50%);clip-path:polygon(3% 0,97% 0,84% 44%,70% 72%,52% 100%,34% 79%,17% 48%);background:linear-gradient(150deg,#8e9ea5,#5c6d7e);box-shadow:inset 18px 0 22px rgba(255,255,255,.12);z-index:2}
+        .hub-shadow{position:absolute;left:50%;bottom:-8px;width:230px;height:32px;transform:translateX(-50%);border-radius:50%;background:rgba(68,99,137,.18);filter:blur(15px)}
+        .hub-platform{position:absolute;top:40px;left:50%;width:125px;height:48px;transform:translateX(-50%);border:2px solid rgba(255,255,255,.9);border-radius:50%;background:radial-gradient(ellipse,rgba(255,255,255,.9),rgba(97,193,255,.62) 50%,rgba(78,120,255,.22));box-shadow:0 0 25px rgba(83,182,255,.55);z-index:8;animation:hubPulse 3s ease-in-out infinite}
+        .hub-platform::after{position:absolute;inset:7px;content:"";border:2px dashed rgba(255,255,255,.8);border-radius:50%;animation:rotateSimple 12s linear infinite}
+        .hub-anchor{position:absolute;top:37px;left:50%;width:10px;height:10px;transform:translateX(-50%);opacity:0}
+        .robot{position:absolute;left:50%;top:50%;width:62px;height:91px;transform:translate(-50%,-100%);z-index:40;pointer-events:none;filter:drop-shadow(0 10px 7px rgba(41,78,118,.22))}
+        .robot-inner{position:relative;width:100%;height:100%;transform:scaleX(var(--face,1));transition:transform .18s}
+        .robot-head{position:absolute;top:4px;left:50%;width:52px;height:42px;transform:translateX(-50%);border:3px solid rgba(255,255,255,.95);border-radius:18px 18px 16px 16px;background:linear-gradient(145deg,#fbfeff,#bce6ff);box-shadow:inset 0 5px 8px rgba(255,255,255,.9),0 5px 9px rgba(57,101,148,.14);z-index:6}
+        .robot-face{position:absolute;inset:9px 8px;border-radius:11px;background:linear-gradient(145deg,#23395c,#294f7e);box-shadow:inset 0 2px 4px rgba(255,255,255,.12)}
+        .robot-eye{position:absolute;top:9px;width:7px;height:9px;border-radius:50%;background:#80f5ff;box-shadow:0 0 8px rgba(118,242,255,.85)}
+        .robot-eye.left{left:8px}
+        .robot-eye.right{right:8px}
+        .robot-antenna{position:absolute;top:-13px;left:50%;width:3px;height:15px;transform:translateX(-50%);border-radius:4px;background:#86aee0}
+        .robot-antenna::before{position:absolute;top:-5px;left:50%;width:8px;height:8px;transform:translateX(-50%);content:"";border-radius:50%;background:#7bdbff;box-shadow:0 0 10px #7bdbff}
+        .robot-body{position:absolute;top:43px;left:50%;width:38px;height:34px;transform:translateX(-50%);border:3px solid rgba(255,255,255,.95);border-radius:12px 12px 15px 15px;background:linear-gradient(145deg,#eaf9ff,#9bcdf7);box-shadow:inset 0 4px 6px rgba(255,255,255,.75)}
+        .robot-core{position:absolute;top:8px;left:50%;width:14px;height:14px;transform:translateX(-50%) rotate(45deg);border-radius:4px;background:linear-gradient(145deg,#9efbff,#6389ff);box-shadow:0 0 10px rgba(91,190,255,.7)}
+        .robot-arm{position:absolute;top:49px;width:10px;height:28px;border:2px solid rgba(255,255,255,.9);border-radius:8px;background:#a7d8fb;transform-origin:50% 3px}
+        .robot-arm.left{left:3px;transform:rotate(15deg)}
+        .robot-arm.right{right:3px;transform:rotate(-15deg)}
+        .robot-leg{position:absolute;top:73px;width:12px;height:17px;border:2px solid rgba(255,255,255,.9);border-radius:4px 4px 7px 7px;background:#8fc4ee;transform-origin:50% 1px}
+        .robot-leg.left{left:18px}
+        .robot-leg.right{right:18px}
+        .robot:not(.walking){animation:robotIdle 2.6s ease-in-out infinite}
+        .robot.walking .robot-leg.left{animation:legLeft .25s linear infinite alternate}
+        .robot.walking .robot-leg.right{animation:legRight .25s linear infinite alternate}
+        .robot.walking .robot-arm.left{animation:armLeft .25s linear infinite alternate}
+        .robot.walking .robot-arm.right{animation:armRight .25s linear infinite alternate}
+        .robot.walking .robot-inner{animation:walkBounce .22s ease-in-out infinite alternate}
+        .transition-mask{position:fixed;inset:0;z-index:500;display:grid;place-items:center;background:radial-gradient(circle,rgba(255,255,255,.86),rgba(172,220,255,.88));opacity:0;visibility:hidden;pointer-events:none;transition:opacity .35s}
+        .transition-mask.show{opacity:1;visibility:visible}
+        .transition-core{width:40px;height:40px;transform:rotate(45deg);border-radius:9px;background:linear-gradient(145deg,#eaffff,#62bfff,#6b79ff);box-shadow:0 0 35px rgba(86,176,255,.8);animation:transitionCore .8s ease-in-out infinite alternate}
+        @keyframes auraMove{from{transform:translate3d(0,0,0) scale(1)}to{transform:translate3d(0,-12px,0) scale(1.04)}}
+        @keyframes cloudLeft{from{transform:translateX(0)}to{transform:translateX(130px)}}
+        @keyframes cloudRight{from{transform:translateX(0)}to{transform:translateX(-130px)}}
+        @keyframes particleFloat{0%{opacity:0;transform:translateY(0) scale(.6)}10%{opacity:.8}100%{opacity:0;transform:translateY(-600px) scale(1.2)}}
+        @keyframes littleRock{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-7px) rotate(4deg)}}
+        @keyframes portalPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
+        @keyframes rotateSimple{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes treeFloat{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(-4px)}}
+        @keyframes serverBlink{0%,100%{opacity:.45}50%{opacity:1}}
+        @keyframes hubPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.14)}}
+        @keyframes robotIdle{0%,100%{translate:0 0}50%{translate:0 -4px}}
+        @keyframes legLeft{from{transform:rotate(18deg)}to{transform:rotate(-18deg)}}
+        @keyframes legRight{from{transform:rotate(-18deg)}to{transform:rotate(18deg)}}
+        @keyframes armLeft{from{transform:rotate(-20deg)}to{transform:rotate(25deg)}}
+        @keyframes armRight{from{transform:rotate(20deg)}to{transform:rotate(-25deg)}}
+        @keyframes walkBounce{from{translate:0 0}to{translate:0 -3px}}
+        @keyframes routeFlow{from{stroke-dashoffset:0}to{stroke-dashoffset:-22}}
+        @keyframes islandSelected{from{filter:brightness(1);transform:translateY(-10px) scale(1.045)}to{filter:brightness(1.18) drop-shadow(0 0 18px var(--accent));transform:translateY(-14px) scale(1.07)}}
+        @keyframes transitionCore{from{transform:rotate(45deg) scale(.8)}to{transform:rotate(225deg) scale(1.2)}}
+        @media (max-width:720px){
+            .brand{top:16px;left:16px}
+            .brand-logo{width:42px;height:42px;border-radius:14px}
+            .brand-title{font-size:17px}
+            .world{width:100%;min-height:100vh;overflow:visible}
+            .hub-island{top:210px;transform:translate(-50%,-50%) scale(.82)}
+            .island{width:250px;height:175px}
+            .assistant-info{bottom:-30px}
+        }
+        @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important}}
     </style>
 </head>
 <body>
-<main>
-    <p class="eyebrow">THX AI PLATFORM</p>
-    <h1>一个入口，连接我的所有 AI 助手</h1>
-    <p class="lead">统一管理模型、权限和工具，每个助手只访问它所属项目的能力。</p>
-    <section class="assistant-grid" aria-label="助手列表">
-        <a class="assistant-card website" href="/preview/website-assistant.html">
-            <span class="card-icon">W</span>
-            <h2>网站助手</h2>
-            <p>回答首页网站、个人项目和站点功能相关的问题。</p>
-            <span class="card-footer"><span>打开预览</span><span>→</span></span>
-        </a>
-        <a class="assistant-card blog" href="/blog/assistant/">
-            <span class="card-icon">B</span>
-            <h2>博客助手</h2>
-            <p>查询已有内容、规划选题、撰写 Markdown，并在对话中确认发布。</p>
-            <span class="card-footer"><span>进入助手</span><span>→</span></span>
-        </a>
-        <a class="assistant-card server" href="/server/assistant/">
-            <span class="card-icon">S</span>
-            <h2>服务器助手</h2>
-            <p>查看运行状态、分析日志，并通过受控操作处理服务器任务。</p>
-            <span class="card-footer"><span>进入助手</span><span>→</span></span>
-        </a>
-    </section>
-    <footer>ai.thxdxw.cn · 个人 AI 能力中心</footer>
-</main>
+<div class="page">
+    <div class="background">
+        <div class="sun-glow"></div><div class="sky-aura"></div>
+        <div class="cloud cloud-1"></div><div class="cloud cloud-2"></div><div class="cloud cloud-3"></div>
+        <span class="particle"></span><span class="particle"></span><span class="particle"></span><span class="particle"></span><span class="particle"></span>
+    </div>
+    <header class="brand"><div class="brand-logo">AI</div><h1 class="brand-title">AI 助手平台</h1></header>
+    <main class="world" id="world">
+        <svg class="route-layer" id="routeLayer"><path class="route-path" id="routePath"></path></svg>
+        <div class="hub-island" id="hubIsland"><div class="hub-shadow"></div><div class="hub-rock"></div><div class="hub-ground"></div><div class="hub-platform"></div><div class="hub-anchor" id="hubAnchor"></div></div>
+        <div class="robot" id="robot"><div class="robot-inner"><div class="robot-head"><div class="robot-antenna"></div><div class="robot-face"><span class="robot-eye left"></span><span class="robot-eye right"></span></div></div><div class="robot-body"><div class="robot-core"></div></div><div class="robot-arm left"></div><div class="robot-arm right"></div><div class="robot-leg left"></div><div class="robot-leg right"></div></div></div>
+        <div id="assistantIslands"></div>
+    </main>
+    <div class="transition-mask" id="transitionMask"><div class="transition-core"></div></div>
+</div>
+
+<script>
+    const assistants=[{id:"website",name:"网站助手",desc:"网站与项目问答",href:"/preview/website-assistant.html",theme:"website"},{id:"blog",name:"博客助手",desc:"内容创作与发布",href:"/blog/assistant/",theme:"blog"},{id:"server",name:"服务器助手",desc:"日志分析与智能运维",href:"/server/assistant/",theme:"server"}];
+    const world=document.getElementById("world"),islandContainer=document.getElementById("assistantIslands"),hubAnchor=document.getElementById("hubAnchor"),robot=document.getElementById("robot"),routeLayer=document.getElementById("routeLayer"),routePath=document.getElementById("routePath"),transitionMask=document.getElementById("transitionMask");
+    let moving=false;
+
+    function landmarkHtml(theme){switch(theme){case"website":return`<div class="portal-landmark"><div class="portal-ring"></div><div class="portal-base"></div></div>`;case"blog":return`<div class="blog-landmark"><div class="magic-tree"></div><div class="tree-trunk"></div><div class="magic-book"></div></div>`;case"server":return`<div class="server-landmark"><div class="antenna"></div><div class="server-tower"><span class="server-light"></span><div class="server-slot"></div><div class="server-slot"></div><div class="server-slot"></div></div></div>`;default:return`<div class="portal-landmark"><div class="portal-ring"></div><div class="portal-base"></div></div>`}}
+
+    function renderIslands(){
+        islandContainer.innerHTML="";
+        assistants.forEach(assistant=>{
+            const island=document.createElement("button");
+            island.type="button";island.className=`island theme-${assistant.theme}`;island.dataset.id=assistant.id;island.dataset.href=assistant.href;island.setAttribute("aria-label",assistant.name);
+            island.innerHTML=`<div class="island-scene"><div class="island-shadow"></div><div class="floating-rock r1"></div><div class="floating-rock r2"></div><div class="island-rock"></div><div class="island-ground">${landmarkHtml(assistant.theme)}<span class="landing-point"></span></div><div class="assistant-info"><h2 class="assistant-name">${assistant.name}</h2><p class="assistant-desc">${assistant.desc}</p></div></div>`;
+            island.addEventListener("click",()=>travelToIsland(island));
+            islandContainer.appendChild(island);
+        });
+        layoutIslands();
+    }
+
+    function layoutIslands(){
+        const islands=[...document.querySelectorAll(".island")];
+        const mobile=window.innerWidth<=720;
+        if(mobile){
+            islands.forEach((island,index)=>{
+                const x=world.clientWidth/2;const y=490+index*255;
+                island.style.left=`${x}px`;island.style.top=`${y}px`;
+            });
+            if(!moving)requestAnimationFrame(placeRobotOnHub);
+            return;
+        }
+        const centerX=world.clientWidth/2,centerY=world.clientHeight*.48;
+        const radiusX=Math.min(world.clientWidth*.34,470),radiusY=Math.min(world.clientHeight*.31,260);
+        const threeAngles=[210,330,90];
+        islands.forEach((island,index)=>{
+            let degree;
+            if(islands.length===3)degree=threeAngles[index];
+            else degree=-90+(360/islands.length)*index;
+            const angle=degree*Math.PI/180;
+            const x=centerX+Math.cos(angle)*radiusX,y=centerY+Math.sin(angle)*radiusY;
+            island.style.left=`${x}px`;island.style.top=`${y}px`;
+        });
+        if(!moving)requestAnimationFrame(placeRobotOnHub);
+    }
+
+    function getPoint(element){
+        const worldRect=world.getBoundingClientRect(),rect=element.getBoundingClientRect();
+        return{x:rect.left-worldRect.left+rect.width/2,y:rect.top-worldRect.top+rect.height/2};
+    }
+
+    function placeRobotOnHub(){
+        const point=getPoint(hubAnchor);
+        robot.style.left=`${point.x}px`;robot.style.top=`${point.y}px`;
+    }
+
+    function bezier(start,control,end,t){
+        const mt=1-t;
+        return{x:mt*mt*start.x+2*mt*t*control.x+t*t*end.x,y:mt*mt*start.y+2*mt*t*control.y+t*t*end.y};
+    }
+
+    function createRoute(start,end){
+        const distance=Math.hypot(end.x-start.x,end.y-start.y);
+        const control={x:(start.x+end.x)/2,y:Math.min(start.y,end.y)-Math.min(120,distance*.22)};
+        routeLayer.setAttribute("viewBox",`0 0 ${world.clientWidth} ${world.clientHeight}`);
+        routePath.setAttribute("d",`M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`);
+        routePath.classList.add("active");
+        return control;
+    }
+
+    function travelToIsland(island){
+        if(moving)return;
+        moving=true;
+        document.querySelectorAll(".island").forEach(item=>item.disabled=true);
+        island.classList.add("selected");
+        const landingPoint=island.querySelector(".landing-point");
+        const start={x:parseFloat(robot.style.left),y:parseFloat(robot.style.top)};
+        const end=getPoint(landingPoint);
+        const control=createRoute(start,end);
+        robot.style.setProperty("--face",end.x<start.x?-1:1);
+        robot.classList.add("walking");
+        const reduceMotion=window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const duration=reduceMotion?80:1250;
+        const startTime=performance.now();
+
+        function frame(now){
+            const elapsed=now-startTime;
+            let t=Math.min(elapsed/duration,1);
+            const eased=t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+            const position=bezier(start,control,end,eased);
+            robot.style.left=`${position.x}px`;robot.style.top=`${position.y}px`;
+            const jump=Math.sin(t*Math.PI*7)*3;
+            robot.style.translate=`0 ${jump}px`;
+            if(t<1){requestAnimationFrame(frame);return;}
+            robot.classList.remove("walking");
+            robot.style.translate="";
+            routePath.classList.remove("active");
+            setTimeout(()=>{
+                transitionMask.classList.add("show");
+                sessionStorage.setItem("lastIslandId", island.dataset.id);
+                setTimeout(()=>{window.location.href=island.dataset.href;},320);
+            },reduceMotion?0:320);
+        }
+        requestAnimationFrame(frame);
+    }
+
+    function resetAll() {
+        moving = false;
+        transitionMask.classList.remove("show");
+        routePath.classList.remove("active");
+        document.querySelectorAll(".island").forEach(item => {
+            item.disabled = false;
+            item.classList.remove("selected");
+        });
+        robot.classList.remove("walking");
+        robot.style.translate = "";
+        layoutIslands();
+        requestAnimationFrame(placeRobotOnHub);
+    }
+
+    function travelBackToHub() {
+        const lastIslandId = sessionStorage.getItem("lastIslandId");
+        if (!lastIslandId) {
+            resetAll();
+            return;
+        }
+
+        const island = document.querySelector(`.island[data-id="${lastIslandId}"]`);
+        if (!island) {
+            resetAll();
+            return;
+        }
+
+        // 关键修复：立刻移除加载遮罩
+        transitionMask.classList.remove("show");
+        // 强制重置 CSS 动画状态，防止残留
+        transitionMask.style.transition = "none";
+        void transitionMask.offsetHeight; // 强制重绘
+        transitionMask.style.transition = "";
+
+        moving = true;
+        island.classList.add("selected");
+        document.querySelectorAll(".island").forEach(item => item.disabled = true);
+
+        const landingPoint = island.querySelector(".landing-point");
+        const start = getPoint(landingPoint);
+        const end = getPoint(hubAnchor);
+
+        robot.style.left = `${start.x}px`;
+        robot.style.top = `${start.y}px`;
+
+        const control = createRoute(start, end);
+        robot.style.setProperty("--face", end.x < start.x ? -1 : 1);
+        robot.classList.add("walking");
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const duration = reduceMotion ? 80 : 1250;
+        const startTime = performance.now();
+
+        function frame(now) {
+            const elapsed = now - startTime;
+            let t = Math.min(elapsed / duration, 1);
+            const eased = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+            const position = bezier(start, control, end, eased);
+            robot.style.left = `${position.x}px`;
+            robot.style.top = `${position.y}px`;
+            const jump = Math.sin(t * Math.PI * 7) * 3;
+            robot.style.translate = `0 ${jump}px`;
+            if (t < 1) { requestAnimationFrame(frame); return; }
+
+            robot.classList.remove("walking");
+            robot.style.translate = "";
+            routePath.classList.remove("active");
+            island.classList.remove("selected");
+            document.querySelectorAll(".island").forEach(item => item.disabled = false);
+            sessionStorage.removeItem("lastIslandId");
+            moving = false;
+        }
+        requestAnimationFrame(frame);
+    }
+
+    renderIslands();
+    window.addEventListener("load",()=>{layoutIslands();requestAnimationFrame(placeRobotOnHub);});
+    window.addEventListener("resize",()=>{if(!moving)layoutIslands();});
+
+    window.addEventListener("pageshow", (event) => {
+        if (event.persisted) {
+            // 强制先清除遮罩，再执行回程动画
+            transitionMask.classList.remove("show");
+            travelBackToHub();
+        } else {
+            resetAll();
+        }
+    });
+</script>
 </body>
 </html>
