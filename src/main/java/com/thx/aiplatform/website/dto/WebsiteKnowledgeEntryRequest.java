@@ -5,7 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryType;
+import com.thx.aiplatform.website.enums.WebsiteKnowledgeEntryType;
 
 /** 知识条目新增/编辑请求。 */
 public record WebsiteKnowledgeEntryRequest(

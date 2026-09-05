@@ -6,7 +6,7 @@ import com.thx.aiplatform.server.service.ServerCommandProposalService;
 import com.thx.aiplatform.server.service.ServerCommandTemplateService;
 import com.thx.aiplatform.server.service.ServerTemporaryCommandService;
 import com.thx.aiplatform.server.entity.ServerEntity;
-import com.thx.aiplatform.server.model.ServerCommandRisk;
+import com.thx.aiplatform.server.enums.ServerCommandRisk;
 import com.thx.aiplatform.server.entity.ServerCommandEntity;
 import com.thx.aiplatform.server.vo.PendingServerOperationView;
 import com.thx.aiplatform.server.vo.PendingServerCommandProposalView;

@@ -4,7 +4,6 @@ import com.thx.aiplatform.platform.AssistantModelConnection;
 import com.thx.aiplatform.server.dto.ServerModelOptionRequest;
 import com.thx.aiplatform.server.dto.ServerModelProviderRequest;
 import com.thx.aiplatform.server.vo.ServerModelProviderView;
-import com.thx.aiplatform.server.repository.ServerModelProviderRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +18,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ServerModelProviderServiceTest {
 
     @Autowired ServerModelProviderService service;
-    @Autowired ServerModelProviderRepository repository;
 
     @Test
     void 密钥只保存密文且所选模型能解析为兼容连接() {
@@ -27,7 +25,7 @@ class ServerModelProviderServiceTest {
                 "coding-plan", "Coding 套餐", "https://coding.example.com/", "openai-completions", "sk-secret", true,
                 List.of(new ServerModelOptionRequest("Coder", "coder-model", "high", true, 0))));
 
-        assertThat(repository.findProvider(provider.id()).orElseThrow().getApiKeyCiphertext())
+        assertThat(service.findProvider(provider.id()).orElseThrow().getApiKeyCiphertext())
                 .startsWith("v1:").doesNotContain("sk-secret");
         assertThat(provider.apiKeyConfigured()).isTrue();
         assertThat(provider.toString()).doesNotContain("sk-secret");

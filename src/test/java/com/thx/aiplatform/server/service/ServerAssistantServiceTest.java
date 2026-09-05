@@ -1,7 +1,8 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.dto.ServerContinuationRequest;
-import com.thx.aiplatform.server.model.ServerAuthenticationType;
+import com.thx.aiplatform.server.enums.ServerAuthenticationType;
+import com.thx.aiplatform.server.service.impl.ServerAssistantServiceImpl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thx.aiplatform.platform.AssistantChatGateway;
@@ -22,17 +23,17 @@ class ServerAssistantServiceTest {
     @Test
     void 动作完成后使用服务端续跑消息恢复同一模型会话() {
         AssistantChatGateway chatGateway = mock(AssistantChatGateway.class);
-        ServerRegistry registry = mock(ServerRegistry.class);
+        ServerConfigurationService configurationService = mock(ServerConfigurationService.class);
         ServerEntity server = new ServerEntity("server-a", "服务器 A", "host", 22, "ops",
                 ServerAuthenticationType.PASSWORD, "ciphertext", null, "host ssh-ed25519 AAAATESTKEY", true);
-        when(registry.requireEnabled("server-a")).thenReturn(server);
+        when(configurationService.requireEnabled("server-a")).thenReturn(server);
         when(chatGateway.streamEvents(any(AssistantChatCommand.class), any(Object[].class))).thenReturn(Flux.empty());
         ServerActionContinuationService continuationService = mock(ServerActionContinuationService.class);
         when(continuationService.consume("continuation-1", "conversation-1", "server-a"))
                 .thenReturn("系统可信事件：命令已经添加，请继续原任务");
         ServerConversationBindingService bindingService = mock(ServerConversationBindingService.class);
-        ServerAssistantService service = new ServerAssistantService(
-                chatGateway, registry, mock(ServerConfigurationService.class), mock(ServerOperationService.class),
+        ServerAssistantService service = new ServerAssistantServiceImpl(
+                chatGateway, configurationService, mock(ServerOperationService.class),
                 mock(SshCommandExecutor.class), mock(ObjectMapper.class), bindingService,
                 mock(ServerCommandProposalService.class), continuationService,
                 mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class),
@@ -55,9 +56,9 @@ class ServerAssistantServiceTest {
         ServerCommandProposalService proposalService = mock(ServerCommandProposalService.class);
         ServerActionContinuationService continuationService = mock(ServerActionContinuationService.class);
         ServerConversationBindingService bindingService = mock(ServerConversationBindingService.class);
-        ServerAssistantService service = new ServerAssistantService(
-                chatGateway, mock(ServerRegistry.class), mock(ServerConfigurationService.class),
-                operationService, mock(SshCommandExecutor.class), mock(ObjectMapper.class), bindingService,
+        ServerAssistantService service = new ServerAssistantServiceImpl(
+                chatGateway, mock(ServerConfigurationService.class), operationService,
+                mock(SshCommandExecutor.class), mock(ObjectMapper.class), bindingService,
                 proposalService, continuationService,
                 mock(ServerCommandTemplateService.class), mock(ServerModelProviderService.class),
                 mock(ServerTemporaryCommandService.class));

@@ -1,9 +1,10 @@
 package com.thx.aiplatform.server.service;
 
 import com.thx.aiplatform.server.vo.PendingServerOperationView;
-import com.thx.aiplatform.server.model.ServerAuthenticationType;
+import com.thx.aiplatform.server.enums.ServerAuthenticationType;
 import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.model.SshExecutionResult;
+import com.thx.aiplatform.server.service.impl.ServerTemporaryCommandServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -23,7 +24,7 @@ class ServerTemporaryCommandServiceTest {
         when(executor.execute(same(server), eq("cd -- '/srv/app' && git status --short")))
                 .thenReturn(new SshExecutionResult("server-a", 0, "clean", "", 12, false));
         ServerOperationService operationService = mock(ServerOperationService.class);
-        ServerTemporaryCommandService service = new ServerTemporaryCommandService(
+        ServerTemporaryCommandService service = new ServerTemporaryCommandServiceImpl(
                 new ServerCommandRiskClassifier(), operationService, executor);
 
         String result = service.executeOrPrepare(
@@ -42,7 +43,7 @@ class ServerTemporaryCommandServiceTest {
                 .thenReturn(new PendingServerOperationView("action-1", "server-a", "服务器 A", "temporary",
                         "临时 Shell 命令", "touch ready", "/srv/app", true, "创建标记", Instant.now(),
                         "PENDING_APPROVAL", "EXECUTE_TEMPORARY_COMMAND"));
-        ServerTemporaryCommandService service = new ServerTemporaryCommandService(
+        ServerTemporaryCommandService service = new ServerTemporaryCommandServiceImpl(
                 new ServerCommandRiskClassifier(), operationService, executor);
 
         String result = service.executeOrPrepare(
@@ -54,7 +55,7 @@ class ServerTemporaryCommandServiceTest {
 
     @Test
     void 工作目录必须是绝对路径且单独校验() {
-        ServerTemporaryCommandService service = new ServerTemporaryCommandService(
+        ServerTemporaryCommandService service = new ServerTemporaryCommandServiceImpl(
                 new ServerCommandRiskClassifier(), mock(ServerOperationService.class), mock(SshCommandExecutor.class));
 
         assertThatThrownBy(() -> service.executeOrPrepare(

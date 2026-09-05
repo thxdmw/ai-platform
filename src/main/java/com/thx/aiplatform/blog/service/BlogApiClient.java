@@ -52,9 +52,9 @@ public class BlogApiClient {
 
     /**
      * categoryId 缺省 1、author 缺省 "AI Assistant"：与博客系统约定好的发布默认值，
-     * 模拟真实后台的人工发布行为。
+     * 模拟真实后台的人工发布行为。public：发布实现从 service.impl 子包调用，跨包必须公开。
      */
-    String publish(BlogPublicationRequest publication) {
+    public String publish(BlogPublicationRequest publication) {
         Map<String, Object> body = Map.ofEntries(
                 Map.entry("title", publication.title()),
                 Map.entry("contentMd", publication.contentMd()),

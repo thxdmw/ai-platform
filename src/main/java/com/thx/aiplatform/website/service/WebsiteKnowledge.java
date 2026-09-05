@@ -1,15 +1,10 @@
 package com.thx.aiplatform.website.service;
 
 import com.thx.aiplatform.website.entity.WebsiteKnowledgeEntryEntity;
-import com.thx.aiplatform.website.repository.WebsiteKnowledgeRepository;
 import org.springframework.stereotype.Component;
 
 import java.text.Normalizer;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 网站知识的轻量检索器。它不把全库塞给模型，而是按标题、FAQ 问题、
@@ -22,9 +17,9 @@ public class WebsiteKnowledge {
     private static final int MAX_ENTRIES = 8;
     private static final int MAX_CONTEXT_CHARACTERS = 6_000;
 
-    private final WebsiteKnowledgeRepository repository;
+    private final WebsiteKnowledgeService repository;
 
-    public WebsiteKnowledge(WebsiteKnowledgeRepository repository) {
+    public WebsiteKnowledge(WebsiteKnowledgeService repository) {
         this.repository = repository;
     }
 

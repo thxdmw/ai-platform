@@ -1,8 +1,8 @@
 package com.thx.aiplatform.website.service;
 
 import com.thx.aiplatform.website.entity.WebsiteKnowledgeEntryEntity;
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryType;
-import com.thx.aiplatform.website.repository.WebsiteKnowledgeRepository;
+import com.thx.aiplatform.website.enums.WebsiteKnowledgeEntryType;
+import com.thx.aiplatform.website.service.WebsiteKnowledgeService;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -17,7 +17,7 @@ class WebsiteKnowledgeTest {
 
     @Test
     void 按问题和关键词召回相关知识() {
-        WebsiteKnowledgeRepository repository = mock(WebsiteKnowledgeRepository.class);
+        WebsiteKnowledgeService repository = mock(WebsiteKnowledgeService.class);
         when(repository.findEnabled()).thenReturn(List.of(
                 entry(1, WebsiteKnowledgeEntryType.FAQ, "博客入口", "博客在哪里？", "点击首页博客卡片", "博客,文章", 80),
                 entry(2, WebsiteKnowledgeEntryType.INFO, "游戏项目", "", "这里有一些小游戏", "游戏", 100)

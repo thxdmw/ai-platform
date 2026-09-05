@@ -1,5 +1,6 @@
 package com.thx.aiplatform.server.service;
 
+import com.thx.aiplatform.server.service.impl.ServerConversationBindingServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -9,7 +10,7 @@ class ServerConversationBindingServiceTest {
 
     @Test
     void 同一对话不能切换到其他服务器() {
-        ServerConversationBindingService service = new ServerConversationBindingService();
+        ServerConversationBindingService service = new ServerConversationBindingServiceImpl();
         service.bind("conversation-1", "server-a");
         service.bind("conversation-1", "server-a");
 
@@ -20,7 +21,7 @@ class ServerConversationBindingServiceTest {
 
     @Test
     void 删除绑定后同一对话编号可以重新绑定服务器() {
-        ServerConversationBindingService service = new ServerConversationBindingService();
+        ServerConversationBindingService service = new ServerConversationBindingServiceImpl();
         service.bind("conversation-1", "server-a");
 
         service.remove("conversation-1");

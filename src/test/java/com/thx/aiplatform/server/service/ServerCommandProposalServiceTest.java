@@ -1,10 +1,12 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.vo.ServerCommandView;
-import com.thx.aiplatform.server.model.ServerCommandRisk;
+import com.thx.aiplatform.server.enums.ServerCommandRisk;
 import com.thx.aiplatform.server.vo.ServerCommandProposalResult;
-import com.thx.aiplatform.server.model.ServerAuthenticationType;
+import com.thx.aiplatform.server.enums.ServerAuthenticationType;
 import com.thx.aiplatform.server.vo.PendingServerCommandProposalView;
+import com.thx.aiplatform.server.service.impl.ServerCommandProposalServiceImpl;
+import com.thx.aiplatform.server.service.impl.ServerCommandTemplateServiceImpl;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
 
 import org.junit.jupiter.api.Test;
@@ -75,8 +77,8 @@ class ServerCommandProposalServiceTest {
         ServerActionContinuationService continuationService = mock(ServerActionContinuationService.class);
         when(continuationService.prepare(eq("conversation-1"), eq("server-a"), argThat(message ->
                 message.contains("继续完成用户原来的任务")))).thenReturn("continuation-1");
-        return new ServerCommandProposalService(configurationService, classifier, properties, continuationService,
-                new ServerCommandTemplateService(new com.fasterxml.jackson.databind.ObjectMapper()),
+        return new ServerCommandProposalServiceImpl(configurationService, classifier, properties, continuationService,
+                new ServerCommandTemplateServiceImpl(new com.fasterxml.jackson.databind.ObjectMapper()),
                 Clock.fixed(Instant.parse("2026-09-01T00:00:00Z"), ZoneOffset.UTC));
     }
 

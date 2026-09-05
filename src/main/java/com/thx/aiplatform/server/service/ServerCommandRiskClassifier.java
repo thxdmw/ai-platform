@@ -1,5 +1,5 @@
 package com.thx.aiplatform.server.service;
-import com.thx.aiplatform.server.model.ServerCommandRisk;
+import com.thx.aiplatform.server.enums.ServerCommandRisk;
 
 import org.springframework.stereotype.Component;
 
@@ -28,9 +28,10 @@ public class ServerCommandRiskClassifier {
     /**
      * 判定命令风险。第一道防线是拒绝一切含 Shell 控制符/重定向/命令替换的命令：这些语法
      * 能以不可见方式串入额外动作，永远无法可靠证明只读；随后把管道拆成段，逐段校验
-     * 可执行文件是否在白名单且参数只读。
+     * 可执行文件是否在白名单且参数只读。public：风险判定供 service.impl 子包调用，
+     * 跨包必须公开。
      */
-    ServerCommandRisk classify(String commandText) {
+    public ServerCommandRisk classify(String commandText) {
         if (commandText == null || commandText.isBlank()) return ServerCommandRisk.DANGEROUS;
         String command = commandText.trim();
         // Shell 控制符能够串入额外动作；无法可靠证明只读时一律升级为危险操作。

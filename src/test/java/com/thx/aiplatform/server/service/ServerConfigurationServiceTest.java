@@ -1,11 +1,10 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.security.ServerCredentialCipher;
-import com.thx.aiplatform.server.repository.ServerConfigurationRepository;
 import com.thx.aiplatform.server.vo.ServerView;
 import com.thx.aiplatform.server.entity.ServerEntity;
 import com.thx.aiplatform.server.dto.ServerConfigurationRequest;
 import com.thx.aiplatform.server.vo.ServerCommandView;
-import com.thx.aiplatform.server.model.ServerCommandRisk;
+import com.thx.aiplatform.server.enums.ServerCommandRisk;
 import com.thx.aiplatform.server.dto.ServerCommandRequest;
 import com.thx.aiplatform.server.entity.ServerCommandEntity;
 
@@ -22,7 +21,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ServerConfigurationServiceTest {
 
     @Autowired ServerConfigurationService service;
-    @Autowired ServerConfigurationRepository repository;
     @Autowired ServerCredentialCipher credentialCipher;
 
     @Test
@@ -33,12 +31,12 @@ class ServerConfigurationServiceTest {
         ServerCommandView command = service.createCommand(server.id(), new ServerCommandRequest(
                 "查看运行时间", "查看服务器运行时间", "uptime", "[]", "NORMAL", true, 10));
 
-        ServerEntity stored = repository.findServer(server.id()).orElseThrow();
+        ServerEntity stored = service.findServer(server.id()).orElseThrow();
         assertThat(stored.getCredentialCiphertext()).doesNotContain("very-secret").startsWith("v1:");
         assertThat(new String(credentialCipher.decrypt(stored.getCredentialCiphertext()))).isEqualTo("very-secret");
-        assertThat(repository.findCommands(server.id(), false)).extracting(ServerCommandEntity::getId)
+        assertThat(service.findCommands(server.id(), false)).extracting(ServerCommandEntity::getId)
                 .contains(command.id());
-        assertThat(repository.findCommands(server.id(), false)).extracting(ServerCommandEntity::getName)
+        assertThat(service.findCommands(server.id(), false)).extracting(ServerCommandEntity::getName)
                 .contains("系统概览", "CPU 与内存", "磁盘使用", "高资源进程", "最近系统告警", "Docker 容器状态");
         assertThat(service.listServers()).singleElement().satisfies(view -> {
             assertThat(view.name()).isEqualTo("服务器 A");
@@ -51,13 +49,13 @@ class ServerConfigurationServiceTest {
         ServerView server = service.createServer(new ServerConfigurationRequest(
                 "服务器 A", "127.0.0.1", 22, "ops", "PASSWORD", "original-secret", null,
                 "127.0.0.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestHostKeyMaterial", true));
-        String before = repository.findServer(server.id()).orElseThrow().getCredentialCiphertext();
+        String before = service.findServer(server.id()).orElseThrow().getCredentialCiphertext();
 
         service.updateServer(server.id(), new ServerConfigurationRequest(
                 "服务器 A-修改", "127.0.0.1", 22, "ops", "PASSWORD", null, null,
                 "127.0.0.1 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestHostKeyMaterial", true));
 
-        assertThat(repository.findServer(server.id()).orElseThrow().getCredentialCiphertext()).isEqualTo(before);
+        assertThat(service.findServer(server.id()).orElseThrow().getCredentialCiphertext()).isEqualTo(before);
     }
 
     @Test
@@ -69,7 +67,7 @@ class ServerConfigurationServiceTest {
         service.installDefaultCommands(server.id());
         service.installDefaultCommands(server.id());
 
-        assertThat(repository.findCommands(server.id(), false))
+        assertThat(service.findCommands(server.id(), false))
                 .hasSize(6)
                 .allSatisfy(command -> {
                     assertThat(command.getRiskLevel()).isEqualTo(ServerCommandRisk.NORMAL);

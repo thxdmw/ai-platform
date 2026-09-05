@@ -1,5 +1,6 @@
 package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
+import com.thx.aiplatform.server.service.impl.ServerActionContinuationServiceImpl;
 
 import org.junit.jupiter.api.Test;
 
@@ -18,7 +19,7 @@ class ServerActionContinuationServiceTest {
     void 续跑凭证绑定会话和服务器且只能消费一次() {
         ServerAssistantProperties properties = new ServerAssistantProperties();
         properties.setApprovalTtl(Duration.ofMinutes(10));
-        ServerActionContinuationService service = new ServerActionContinuationService(properties,
+        ServerActionContinuationService service = new ServerActionContinuationServiceImpl(properties,
                 Clock.fixed(Instant.parse("2026-09-01T00:00:00Z"), ZoneOffset.UTC));
         String id = service.prepare("conversation-1", "server-a", "继续原任务");
 

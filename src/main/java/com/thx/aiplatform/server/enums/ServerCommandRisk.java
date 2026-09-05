@@ -1,4 +1,4 @@
-package com.thx.aiplatform.server.model;
+package com.thx.aiplatform.server.enums;
 
 /**
  * 命令风险等级：NORMAL 可直接执行，DANGEROUS 必须先生成确认选项、经用户点击后才执行。

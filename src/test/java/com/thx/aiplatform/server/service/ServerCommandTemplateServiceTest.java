@@ -2,7 +2,8 @@ package com.thx.aiplatform.server.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.thx.aiplatform.server.entity.ServerCommandEntity;
-import com.thx.aiplatform.server.model.ServerCommandRisk;
+import com.thx.aiplatform.server.enums.ServerCommandRisk;
+import com.thx.aiplatform.server.service.impl.ServerCommandTemplateServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -10,7 +11,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ServerCommandTemplateServiceTest {
 
-    private final ServerCommandTemplateService service = new ServerCommandTemplateService(new ObjectMapper());
+    private final ServerCommandTemplateService service = new ServerCommandTemplateServiceImpl(new ObjectMapper());
 
     @Test
     void 路径参数可以复用且执行前统一转义() {

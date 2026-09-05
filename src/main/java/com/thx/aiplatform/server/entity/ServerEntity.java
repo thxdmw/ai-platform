@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.thx.aiplatform.server.model.ServerAuthenticationType;
+import com.thx.aiplatform.server.enums.ServerAuthenticationType;
 
 /**
  * server_assistant_server 表的持久化实体，同时充当服务层内部流转的领域对象（网格中

@@ -1,4 +1,4 @@
-package com.thx.aiplatform.server.model;
+package com.thx.aiplatform.server.enums;
 
 /**
  * 服务器认证方式枚举。parse 对大小写与首尾空格容错（PASSWORD/password 均可），未知值

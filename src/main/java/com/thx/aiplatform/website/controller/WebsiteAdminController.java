@@ -4,8 +4,8 @@ import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
 import com.thx.aiplatform.website.dto.WebsiteAssistantSettingsRequest;
 import com.thx.aiplatform.website.entity.WebsiteKnowledgeEntryEntity;
 import com.thx.aiplatform.website.dto.WebsiteKnowledgeEntryRequest;
-import com.thx.aiplatform.website.repository.WebsiteKnowledgeRepository;
-import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
+import com.thx.aiplatform.website.service.WebsiteKnowledgeService;
+import com.thx.aiplatform.website.service.WebsiteSettingsService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,12 +24,12 @@ import java.util.List;
 @RequestMapping("/api/website/v1")
 class WebsiteAdminController {
 
-    private final WebsiteKnowledgeRepository knowledgeRepository;
-    private final WebsiteSettingsRepository settingsRepository;
+    private final WebsiteKnowledgeService knowledgeRepository;
+    private final WebsiteSettingsService settingsRepository;
 
     WebsiteAdminController(
-            WebsiteKnowledgeRepository knowledgeRepository,
-            WebsiteSettingsRepository settingsRepository
+            WebsiteKnowledgeService knowledgeRepository,
+            WebsiteSettingsService settingsRepository
     ) {
         this.knowledgeRepository = knowledgeRepository;
         this.settingsRepository = settingsRepository;

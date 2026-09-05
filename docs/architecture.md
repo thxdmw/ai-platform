@@ -16,10 +16,11 @@ ai-platform
   └─ server：服务器/命令配置、凭据加密、SSH 执行与危险命令确认
 ```
 
-三个助手模块的包内统一按职责分子包：`controller`（REST/页面控制器）、`service`（业务服务）、
-`entity`（数据库表映射的持久化实体）、`dto`（请求入参）、`vo`（API 出参）、`model`（枚举与
-内部共享类型）、`config`（Properties、拦截器、异常处理）；`website`/`server` 额外有
-`repository`（MyBatis-Plus 映射器与仓库），`server` 另有 `security`（凭据加解密），
+三个助手模块的包内统一按职责分子包：`controller`（REST/页面控制器）、`service`（业务接口，
+无状态工具型组件保持具体类）、`service.impl`（接口实现）、`entity`（数据库表映射的持久化
+实体）、`enums`（枚举）、`dto`（请求入参）、`vo`（API 出参）、`model`（内部共享类型）、
+`config`（Properties、拦截器、异常处理）；`website`/`server` 额外有
+`repository`（只放 MyBatis-Plus 映射器），`server` 另有 `security`（凭据加解密），
 `blog`/`server` 的模型工具统一放在 `tool` 子包。实体是各表字段的唯一数据定义，服务层直接
 持有实体，不再维护与实体重复的记录；`dto`/`vo` 只在入参校验和出参裁剪确有必要时新增。
 子包不声明 `@ApplicationModule`，属于父模块一部分，模块边界仍由各模块根的

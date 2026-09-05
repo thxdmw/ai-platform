@@ -1,5 +1,6 @@
 package com.thx.aiplatform.server.model;
 
+import com.thx.aiplatform.server.enums.ServerCommandParameterType;
 import java.util.List;
 
 /**

@@ -1,7 +1,8 @@
 package com.thx.aiplatform.website.repository;
 
 import com.thx.aiplatform.website.dto.WebsiteKnowledgeEntryRequest;
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryType;
+import com.thx.aiplatform.website.enums.WebsiteKnowledgeEntryType;
+import com.thx.aiplatform.website.service.WebsiteKnowledgeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WebsiteKnowledgeRepositoryTest {
 
     @Autowired
-    private WebsiteKnowledgeRepository repository;
+    private WebsiteKnowledgeService repository;
 
     @Test
     void 知识条目可以新增编辑和删除() {

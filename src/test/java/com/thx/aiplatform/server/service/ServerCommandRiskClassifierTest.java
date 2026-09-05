@@ -1,5 +1,5 @@
 package com.thx.aiplatform.server.service;
-import com.thx.aiplatform.server.model.ServerCommandRisk;
+import com.thx.aiplatform.server.enums.ServerCommandRisk;
 
 import org.junit.jupiter.api.Test;
 

@@ -3,7 +3,7 @@ package com.thx.aiplatform.website.entity;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.thx.aiplatform.website.model.WebsiteKnowledgeEntryType;
+import com.thx.aiplatform.website.enums.WebsiteKnowledgeEntryType;
 
 import java.time.LocalDateTime;
 

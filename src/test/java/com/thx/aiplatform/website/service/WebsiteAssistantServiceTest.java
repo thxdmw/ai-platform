@@ -4,7 +4,7 @@ import com.thx.aiplatform.website.dto.WebsiteChatRequest;
 import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;
 import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
-import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
+import com.thx.aiplatform.website.service.impl.WebsiteAssistantServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import reactor.core.publisher.Flux;
@@ -24,10 +24,10 @@ class WebsiteAssistantServiceTest {
     @Test
     void 清理会话时固定使用网站助手编号() {
         AssistantChatGateway gateway = mock(AssistantChatGateway.class);
-        WebsiteAssistantService service = new WebsiteAssistantService(
+        WebsiteAssistantService service = new WebsiteAssistantServiceImpl(
                 gateway,
                 mock(WebsiteKnowledge.class),
-                mock(WebsiteSettingsRepository.class)
+                mock(WebsiteSettingsService.class)
         );
 
         service.clear("conversation-1");
@@ -39,12 +39,12 @@ class WebsiteAssistantServiceTest {
     void 网站助手固定助手编号并注入公开知识() {
         AssistantChatGateway gateway = mock(AssistantChatGateway.class);
         WebsiteKnowledge knowledge = mock(WebsiteKnowledge.class);
-        WebsiteSettingsRepository settingsRepository = mock(WebsiteSettingsRepository.class);
+        WebsiteSettingsService settingsRepository = mock(WebsiteSettingsService.class);
         when(knowledge.contentFor("博客在哪里？")).thenReturn("首页包含博客入口");
         when(settingsRepository.get()).thenReturn(new WebsiteAssistantSettingsEntity(
                 "网站助手", "你好", "优先回答首页入口", true, LocalDateTime.now()));
         when(gateway.stream(org.mockito.ArgumentMatchers.any())).thenReturn(Flux.just("请点击博客卡片"));
-        WebsiteAssistantService service = new WebsiteAssistantService(gateway, knowledge, settingsRepository);
+        WebsiteAssistantService service = new WebsiteAssistantServiceImpl(gateway, knowledge, settingsRepository);
 
         assertThat(service.stream(new WebsiteChatRequest("conversation-1", " 博客在哪里？ "))
                 .collectList()

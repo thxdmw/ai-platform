@@ -39,13 +39,15 @@
 | 子包 | 内容 |
 |---|---|
 | `controller` | REST 与页面控制器，只做参数校验和响应装配，不含业务逻辑 |
-| `service` | 业务服务（对话编排、审批流、配置管理、外部客户端、SSH 执行） |
+| `service` | 业务接口（对话编排、审批流、配置管理、外部客户端、SSH 执行）；无状态工具型组件（SshCommandExecutor、ServerCommandRiskClassifier、BlogApiClient 等）保持具体类 |
+| `service.impl` | `service` 接口的实现类（`XxxServiceImpl`），`@Service`/`@Transactional` 注解都落在实现上 |
 | `entity`（website/server） | MyBatis-Plus 表映射的持久化实体，兼作服务层内部流转的领域对象，字段只定义这一份 |
+| `enums` | 枚举（认证方式、风险等级、协议、参数类型、知识类型），与实体字段按 name() 映射 |
 | `dto` | 请求入参（*Request），带 Bean Validation 校验 |
 | `vo` | API 出参（*View / *Result / 公开配置），与外层数据定义分离 |
-| `model` | 枚举与内部共享类型（参数定义、执行明细等不属于三层的类型） |
+| `model` | 不属于三层/枚举的内部共享类型（参数定义、执行明细等） |
 | `config` | 配置属性（Properties）、Web 配置、拦截器和异常处理器 |
-| `repository`（website/server） | MyBatis-Plus 映射器与仓库（实体只经仓库进出数据库） |
+| `repository`（website/server） | 只放 MyBatis-Plus 映射器接口（*Mapper），实体只经映射器进出数据库 |
 | `security`（仅 server） | 凭据加解密 |
 | `tool`（blog/server） | 暴露给模型的 Spring AI 工具 |
 

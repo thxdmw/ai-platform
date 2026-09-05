@@ -2,7 +2,7 @@ package com.thx.aiplatform.website.controller;
 
 import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
 import com.thx.aiplatform.website.vo.WebsitePublicConfiguration;
-import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
+import com.thx.aiplatform.website.service.WebsiteSettingsService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -12,9 +12,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/public/v1/website")
 class WebsitePublicConfigurationController {
 
-    private final WebsiteSettingsRepository settingsRepository;
+    private final WebsiteSettingsService settingsRepository;
 
-    WebsitePublicConfigurationController(WebsiteSettingsRepository settingsRepository) {
+    WebsitePublicConfigurationController(WebsiteSettingsService settingsRepository) {
         this.settingsRepository = settingsRepository;
     }
 

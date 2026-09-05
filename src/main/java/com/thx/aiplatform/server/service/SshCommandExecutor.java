@@ -2,7 +2,7 @@ package com.thx.aiplatform.server.service;
 import com.thx.aiplatform.server.security.ServerCredentialCipher;
 import com.thx.aiplatform.server.model.SshExecutionResult;
 import com.thx.aiplatform.server.entity.ServerEntity;
-import com.thx.aiplatform.server.model.ServerAuthenticationType;
+import com.thx.aiplatform.server.enums.ServerAuthenticationType;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
 
 import com.jcraft.jsch.ChannelExec;

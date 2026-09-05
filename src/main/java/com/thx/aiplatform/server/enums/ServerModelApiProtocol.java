@@ -1,4 +1,4 @@
-package com.thx.aiplatform.server.model;
+package com.thx.aiplatform.server.enums;
 
 import java.util.Arrays;
 

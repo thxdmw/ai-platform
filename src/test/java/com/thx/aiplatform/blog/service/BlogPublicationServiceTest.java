@@ -3,6 +3,7 @@ import com.thx.aiplatform.blog.vo.PublicationResult;
 import com.thx.aiplatform.blog.vo.PendingPublicationView;
 import com.thx.aiplatform.blog.dto.BlogPublicationRequest;
 import com.thx.aiplatform.blog.config.BlogAssistantProperties;
+import com.thx.aiplatform.blog.service.impl.BlogPublicationServiceImpl;
 
 import org.junit.jupiter.api.Test;
 
@@ -55,7 +56,7 @@ class BlogPublicationServiceTest {
     }
 
     private BlogPublicationService service(BlogApiClient apiClient, Clock clock) {
-        return new BlogPublicationService(apiClient, properties(), clock);
+        return new BlogPublicationServiceImpl(apiClient, properties(), clock);
     }
 
     private BlogAssistantProperties properties() {

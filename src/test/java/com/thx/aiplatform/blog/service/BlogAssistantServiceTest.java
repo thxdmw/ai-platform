@@ -2,6 +2,7 @@ package com.thx.aiplatform.blog.service;
 import com.thx.aiplatform.blog.tool.BlogQueryTools;
 import com.thx.aiplatform.blog.tool.BlogPublicationTool;
 import com.thx.aiplatform.blog.dto.BlogChatRequest;
+import com.thx.aiplatform.blog.service.impl.BlogAssistantServiceImpl;
 
 import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;
@@ -25,7 +26,7 @@ class BlogAssistantServiceTest {
         BlogPublicationService publicationService = mock(BlogPublicationService.class);
         when(gateway.stream(any(AssistantChatCommand.class), any(Object[].class)))
                 .thenReturn(Flux.just("回答"));
-        BlogAssistantService service = new BlogAssistantService(gateway, queryTools, publicationService);
+        BlogAssistantService service = new BlogAssistantServiceImpl(gateway, queryTools, publicationService);
 
         assertThat(service.stream(new BlogChatRequest("session-1", " 查询最新文章 ")).blockLast())
                 .isEqualTo("回答");

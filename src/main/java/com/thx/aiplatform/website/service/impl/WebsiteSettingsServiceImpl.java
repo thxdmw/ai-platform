@@ -1,21 +1,24 @@
-package com.thx.aiplatform.website.repository;
+package com.thx.aiplatform.website.service.impl;
 
-import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
 import com.thx.aiplatform.website.dto.WebsiteAssistantSettingsRequest;
-import org.springframework.stereotype.Repository;
+import com.thx.aiplatform.website.entity.WebsiteAssistantSettingsEntity;
+import com.thx.aiplatform.website.repository.WebsiteAssistantSettingsMapper;
+import com.thx.aiplatform.website.service.WebsiteSettingsService;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
-/** 单例网站助手设置的持久化边界：配置表只有一行（id=1），读改写都围绕这一行。 */
-@Repository
-public class WebsiteSettingsRepository {
+/** 网站助手设置的行级持久化实现：更新后回读最新行返回。 */
+@Service
+public class WebsiteSettingsServiceImpl implements WebsiteSettingsService {
 
     private final WebsiteAssistantSettingsMapper mapper;
 
-    public WebsiteSettingsRepository(WebsiteAssistantSettingsMapper mapper) {
+    public WebsiteSettingsServiceImpl(WebsiteAssistantSettingsMapper mapper) {
         this.mapper = mapper;
     }
 
+    @Override
     public WebsiteAssistantSettingsEntity get() {
         WebsiteAssistantSettingsEntity entity = mapper.selectById(1);
         if (entity == null) {
@@ -24,6 +27,7 @@ public class WebsiteSettingsRepository {
         return entity;
     }
 
+    @Override
     public WebsiteAssistantSettingsEntity update(WebsiteAssistantSettingsRequest request) {
         WebsiteAssistantSettingsEntity entity = new WebsiteAssistantSettingsEntity(
                 request.assistantName().trim(),

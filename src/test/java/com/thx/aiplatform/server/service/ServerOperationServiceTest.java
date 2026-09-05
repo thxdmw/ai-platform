@@ -4,10 +4,11 @@ import com.thx.aiplatform.server.vo.ServerOperationResult;
 import com.thx.aiplatform.server.dto.ServerOperationDecisionRequest;
 import com.thx.aiplatform.server.vo.ServerOperationDecisionResult;
 import com.thx.aiplatform.server.entity.ServerEntity;
-import com.thx.aiplatform.server.model.ServerCommandRisk;
+import com.thx.aiplatform.server.enums.ServerCommandRisk;
 import com.thx.aiplatform.server.entity.ServerCommandEntity;
-import com.thx.aiplatform.server.model.ServerAuthenticationType;
+import com.thx.aiplatform.server.enums.ServerAuthenticationType;
 import com.thx.aiplatform.server.vo.PendingServerOperationView;
+import com.thx.aiplatform.server.service.impl.ServerOperationServiceImpl;
 import com.thx.aiplatform.server.config.ServerAssistantProperties;
 
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ class ServerOperationServiceTest {
         when(executor.execute(same(server), eq(command.getCommandText())))
                 .thenReturn(new SshExecutionResult("server-a", 0, "active", "", 120, false));
         ServerActionContinuationService continuationService = continuationService();
-        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService,
+        ServerOperationService service = new ServerOperationServiceImpl(executor, properties(), continuationService,
                 Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
 
         PendingServerOperationView pending = service.prepare("conversation-1", server, command, "服务异常");
@@ -54,7 +55,7 @@ class ServerOperationServiceTest {
     @Test
     void 普通命令不能伪装成待确认危险操作() {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
-        ServerOperationService service = new ServerOperationService(
+        ServerOperationService service = new ServerOperationServiceImpl(
                 executor, properties(), continuationService(), Clock.systemUTC());
         ServerCommandEntity command = new ServerCommandEntity(
                 "command-2", "server-a", "查看状态", "查看状态", "uptime", "[]", ServerCommandRisk.NORMAL, true, 0);
@@ -71,7 +72,7 @@ class ServerOperationServiceTest {
         ServerCommandEntity command = dangerousCommand();
         when(executor.execute(same(server), eq(command.getCommandText())))
                 .thenThrow(new IllegalStateException("连接中断"));
-        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService(),
+        ServerOperationService service = new ServerOperationServiceImpl(executor, properties(), continuationService(),
                 Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
 
         PendingServerOperationView pending = service.prepare("conversation-1", server, command, "服务异常");
@@ -87,7 +88,7 @@ class ServerOperationServiceTest {
     void 拒绝临时命令并补充说明后续跑同一任务() {
         SshCommandExecutor executor = mock(SshCommandExecutor.class);
         ServerActionContinuationService continuationService = continuationService();
-        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService,
+        ServerOperationService service = new ServerOperationServiceImpl(executor, properties(), continuationService,
                 Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
         PendingServerOperationView pending = service.prepareTemporary(
                 "conversation-1", server(), "/srv/app", "rm -f cache.tmp",
@@ -109,7 +110,7 @@ class ServerOperationServiceTest {
         ServerEntity server = server();
         when(executor.execute(same(server), eq("cd -- '/srv/app' && systemctl restart api")))
                 .thenReturn(new SshExecutionResult("server-a", 0, "", "", 50, false));
-        ServerOperationService service = new ServerOperationService(executor, properties(), continuationService(),
+        ServerOperationService service = new ServerOperationServiceImpl(executor, properties(), continuationService(),
                 Clock.fixed(Instant.parse("2026-08-31T00:00:00Z"), ZoneOffset.UTC));
         PendingServerOperationView pending = service.prepareTemporary(
                 "conversation-1", server, "/srv/app", "systemctl restart api",
