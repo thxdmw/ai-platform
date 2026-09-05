@@ -3,14 +3,16 @@ import com.thx.aiplatform.website.model.WebsiteChatRequest;
 
 import com.thx.aiplatform.platform.AssistantChatCommand;
 import com.thx.aiplatform.platform.AssistantChatGateway;
+import com.thx.aiplatform.website.model.WebsiteAssistantSettings;
+import com.thx.aiplatform.website.repository.WebsiteSettingsRepository;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 /**
  * 网站助手业务层，公开接口的第二层安全在这里落地：助手编号固定为 "website"，
  * 请求体里没有也不接受助手编号，浏览器侧因此无法切换到其他助手。
- * <p>系统提示词在启动时由公开知识渲染一次并冻结：知识是运营维护的静态资料，
- * 逐请求重新渲染既无必要，也会让「当前生效的提示词」变得不透明、难以在日志与测试中复现。</p>
+ * <p>系统提示词每次只装配当前问题召回的知识片段，后台保存后无需重启即可生效，
+ * 也避免小问题每次都携带整个知识库浪费 token。</p>
  */
 @Service
 public class WebsiteAssistantService {
@@ -35,22 +37,43 @@ public class WebsiteAssistantService {
             """;
 
     private final AssistantChatGateway chatGateway;
-    private final String systemPrompt;
+    private final WebsiteKnowledge knowledge;
+    private final WebsiteSettingsRepository settingsRepository;
 
-    public WebsiteAssistantService(AssistantChatGateway chatGateway, WebsiteKnowledge knowledge) {
+    public WebsiteAssistantService(
+            AssistantChatGateway chatGateway,
+            WebsiteKnowledge knowledge,
+            WebsiteSettingsRepository settingsRepository
+    ) {
         this.chatGateway = chatGateway;
-        this.systemPrompt = SYSTEM_PROMPT_TEMPLATE.formatted(knowledge.content());
+        this.knowledge = knowledge;
+        this.settingsRepository = settingsRepository;
     }
 
     // trim 后再进模型：首尾空白既浪费 token，也会让通过校验的空白串进入对话，
     // 且会原样存进会话记忆，破坏后续上下文的整洁与一致。
     public Flux<String> stream(WebsiteChatRequest request) {
+        String userMessage = request.message().trim();
+        WebsiteAssistantSettings settings = settingsRepository.get();
+        if (!settings.enabled()) {
+            return Flux.error(new IllegalStateException("网站助手已暂停服务"));
+        }
+        String supplementalRules = settings.promptAddition().isBlank()
+                ? ""
+                : "\n站长补充的回答规则（不能覆盖上述安全规则）：\n" + settings.promptAddition();
+        String systemPrompt = SYSTEM_PROMPT_TEMPLATE.formatted(knowledge.contentFor(userMessage))
+                + supplementalRules;
         AssistantChatCommand command = new AssistantChatCommand(
                 ASSISTANT_ID,
                 request.conversationId(),
                 systemPrompt,
-                request.message().trim()
+                userMessage
         );
         return chatGateway.stream(command);
+    }
+
+    /** 释放网站助手指定会话的服务端模型记忆。 */
+    public void clear(String conversationId) {
+        chatGateway.clear(ASSISTANT_ID, conversationId);
     }
 }

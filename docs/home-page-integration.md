@@ -2,7 +2,7 @@
 
 ## 目标
 
-组件代码由 `ai-platform` 提供，但组件仍显示在首页右下角。首页项目不再维护助手的 CSS、交互逻辑或浏览器签名密钥。
+组件代码由 `ai-platform` 提供。未打开时入口显示在首页右下角；桌面端打开后展示右侧整高对话栏并让首页内容同步变窄，移动端则全屏展示。首页项目不再维护助手的 CSS 和交互逻辑。
 
 ## 首页改动
 
@@ -27,12 +27,26 @@
 
 ```text
 WEBSITE_ASSISTANT_ALLOWED_ORIGINS=https://thxdxw.cn
-WEBSITE_ASSISTANT_REQUESTS_PER_MINUTE=20
+WEBSITE_ASSISTANT_ACCESS_TOKEN=使用独立高强度口令
+WEBSITE_ASSISTANT_REQUESTS_PER_MINUTE=6
+WEBSITE_ASSISTANT_REQUESTS_PER_CLIENT_PER_DAY=30
+WEBSITE_ASSISTANT_REQUESTS_PER_DAY=300
 AI_CHAT_PROVIDER=deepseek
 DEEPSEEK_API_KEY=由部署环境提供
 ```
 
-多个精确来源使用逗号分隔。不要使用 `*`，也不要在首页 JavaScript 中配置共享密钥。
+多个精确来源使用逗号分隔。不要使用 `*`，也不要在首页 JavaScript 中配置共享密钥。限流计数保存在当前应用实例内存中，重启后重置；如果以后水平扩容到多实例，应迁移到 Redis 统一计数。
+
+## 知识库后台
+
+从 AI 平台首页点击「网站助手」，或直接打开 `/website/assistant/`。口令验证成功后可以管理两类知识：
+
+- 网站资料：适合功能、项目、入口和站点介绍。
+- FAQ：适合联系方式、收费、权限等必须使用稳定口径的问题。
+
+后台与其他助手页面统一采用 ChatGPT 风格的浅色中性界面。首页组件在桌面端以带过渡动画的右侧栏打开，在移动端全屏打开；“新建对话”会先清理服务端模型记忆，成功后再清空本地记录并生成新的会话编号。
+
+当前使用可解释的轻量召回：按标题、FAQ 问题、关键词和正文相关性取最多 8 条、最多 6000 字符送入模型。这已避免全量提示词的 token 浪费；长文档和百级条目再升级为 pgvector 混合检索。
 
 ## 同域路径方案
 

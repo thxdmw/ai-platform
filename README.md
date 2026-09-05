@@ -6,11 +6,11 @@
 
 ## 当前能力
 
-- 网站助手公开 SSE 接口
-- 首页右下角悬浮式 Web Component
-- 网站公开知识与系统规则隔离
+- 网站助手公开 SSE 接口与口令保护的知识库后台
+- 结构化网站资料、FAQ 与轻量相关性召回，不再每次注入全量知识
+- 桌面端右侧整高对话栏，移动端全屏对话
 - 精确 CORS 来源配置
-- 按客户端地址进行基础限流
+- 按客户端地址进行分钟/每日限流，另设全站每日总配额
 - Ollama 与 DeepSeek 模型配置入口
 - 独立的博客后台助手页面与本地会话历史
 - 博客概览、搜索、详情、分类与标签的精简只读工具
@@ -34,6 +34,8 @@ mvn spring-boot:run
 
 组件预览地址：`http://localhost:9900/preview/website-assistant.html`
 
+网站助手后台：`http://localhost:9900/website/assistant/`（需配置 `WEBSITE_ASSISTANT_ACCESS_TOKEN`）
+
 博客助手地址：`http://localhost:9900/blog/assistant/`
 
 服务器助手地址：`http://localhost:9900/server/assistant/`
@@ -47,6 +49,7 @@ mvn spring-boot:run
 ```
 
 环境变量与反向代理说明见 [首页接入文档](docs/home-page-integration.md)。
+网站知识保存在 PostgreSQL/H2，保存后下一次问答立即生效，无需重启。当条目超过约 100 条或开始导入长文档时，建议在现有关键词召回上增加 Embedding + pgvector，组成混合 RAG。
 
 博客助手需要配置 `BLOG_ASSISTANT_ACCESS_TOKEN`、`BLOG_API_BASE_URL` 和
 `BLOG_API_KEY`。访问口令由管理员进入页面时手动输入，只保存在浏览器当前会话中。

@@ -18,7 +18,8 @@
         ? new URL(configuredApiBase, window.location.href).href.replace(/\/$/, '')
         : scriptUrl.origin;
     const stylesheetUrl = new URL('widget.css', scriptUrl).href;
-    const assistantTitle = loaderScript.dataset.title?.trim() || '网站智能助手';
+    const configuredTitle = loaderScript.dataset.title?.trim();
+    const hostStyleId = 'thx-website-assistant-host-style';
 
     // 网站助手前端组件：聊天记录和会话编号保存在 localStorage，刷新页面可继续同一会话；
     // 模型记忆也按 conversationId 挂在服务端，因此「新建会话」必须同时换编号并清空本地记录。
@@ -29,8 +30,12 @@
             this.messages = this.readMessages();
             this.conversationId = this.readConversationId();
             this.pending = false;
+            this.clearingConversation = false;
             this.reader = null;
             this.themeObserver = null;
+            this.closeTimer = null;
+            this.assistantTitle = configuredTitle || '网站智能助手';
+            this.welcomeMessage = '你好！我可以介绍首页功能，并帮你找到对应入口。';
         }
 
         connectedCallback() {
@@ -38,6 +43,8 @@
             this.bindEvents();
             this.renderMessages();
             this.syncTheme();
+            this.installHostLayoutStyle();
+            this.loadPublicConfiguration();
             // 首页可能在运行中切换主题（data-theme/class），跟随宿主页面而不是固定一种外观。
             this.themeObserver = new MutationObserver(() => this.syncTheme());
             this.themeObserver.observe(document.documentElement, {
@@ -50,6 +57,8 @@
             this.themeObserver?.disconnect();
             // 组件被移除时中断进行中的 SSE 读取，避免 reader 悬挂占用连接。
             this.reader?.cancel().catch(() => {});
+            window.clearTimeout(this.closeTimer);
+            document.documentElement.classList.remove('thx-ai-sidebar-open', 'thx-ai-sidebar-closing');
         }
 
         // 整个界面用原生模板字符串构建并放入 shadow DOM，与首页样式完全隔离；
@@ -63,13 +72,18 @@
             wrapper.className = 'thx-ai-root';
             wrapper.innerHTML = `
                 <button class="thx-ai-launcher" type="button" aria-label="打开网站智能助手" aria-expanded="false">
-                    <span aria-hidden="true">🤖</span>
+                    <span class="thx-ai-launcher-glow" aria-hidden="true"></span>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5A4 4 0 0112 2a4 4 0 014 3.5M12 2V.8M5.5 8h13A2.5 2.5 0 0121 10.5v7a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 17.5v-7A2.5 2.5 0 015.5 8zM7 13h.01M17 13h.01M8.5 17h7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                    <span class="thx-ai-launcher-label">问助手</span>
                 </button>
                 <section class="thx-ai-panel" role="dialog" aria-label="网站智能助手" hidden>
                     <header class="thx-ai-header">
-                        <div>
+                        <div class="thx-ai-identity">
+                            <span class="thx-ai-avatar" aria-hidden="true">AI</span>
+                            <span>
                             <strong class="thx-ai-title"></strong>
-                            <span>回答首页功能与导航问题</span>
+                            <small><i></i>可随时询问站点功能与导航</small>
+                            </span>
                         </div>
                         <div class="thx-ai-header-actions">
                             <button class="thx-ai-new" type="button" title="新建会话" aria-label="新建会话">↻</button>
@@ -77,11 +91,16 @@
                         </div>
                     </header>
                     <div class="thx-ai-messages" role="log" aria-live="polite"></div>
+                    <div class="thx-ai-quick-questions" aria-label="快捷问题">
+                        <button type="button" data-question="这个网站有哪些功能？">了解站点</button>
+                        <button type="button" data-question="博客入口在哪里？">寻找博客</button>
+                        <button type="button" data-question="怎么搜索站点？">使用搜索</button>
+                    </div>
                     <form class="thx-ai-form">
                         <label class="thx-ai-input-label" for="thx-ai-input">询问网站功能</label>
                         <div class="thx-ai-input-row">
-                            <textarea id="thx-ai-input" rows="1" maxlength="500" placeholder="例如：博客入口在哪里？"></textarea>
-                            <button class="thx-ai-send" type="submit" aria-label="发送消息">发送</button>
+                            <textarea id="thx-ai-input" rows="1" maxlength="300" placeholder="询问网站功能或入口…"></textarea>
+                            <button class="thx-ai-send" type="submit" aria-label="发送消息"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L10 14M21 3l-7 18-4-7-7-4 18-7z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
                         </div>
                         <p class="thx-ai-hint">AI 可能出错，请以首页实际入口为准</p>
                     </form>
@@ -90,13 +109,15 @@
             this.shadowRoot.replaceChildren(link, wrapper);
             this.launcher = this.shadowRoot.querySelector('.thx-ai-launcher');
             this.panel = this.shadowRoot.querySelector('.thx-ai-panel');
-            this.shadowRoot.querySelector('.thx-ai-title').textContent = assistantTitle;
-            this.launcher.setAttribute('aria-label', `打开${assistantTitle}`);
-            this.panel.setAttribute('aria-label', assistantTitle);
+            this.shadowRoot.querySelector('.thx-ai-title').textContent = this.assistantTitle;
+            this.launcher.setAttribute('aria-label', `打开${this.assistantTitle}`);
+            this.panel.setAttribute('aria-label', this.assistantTitle);
             this.messagesElement = this.shadowRoot.querySelector('.thx-ai-messages');
             this.form = this.shadowRoot.querySelector('.thx-ai-form');
             this.input = this.shadowRoot.querySelector('textarea');
             this.sendButton = this.shadowRoot.querySelector('.thx-ai-send');
+            this.quickQuestions = this.shadowRoot.querySelector('.thx-ai-quick-questions');
+            this.newButton = this.shadowRoot.querySelector('.thx-ai-new');
         }
 
         bindEvents() {
@@ -108,10 +129,18 @@
                 this.sendCurrentMessage();
             });
             this.input.addEventListener('keydown', event => {
-                if (event.key === 'Enter' && !event.shiftKey) {
+                if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
                     event.preventDefault();
                     this.form.requestSubmit();
                 }
+            });
+            this.input.addEventListener('input', () => this.resizeInput());
+            this.quickQuestions.addEventListener('click', event => {
+                const button = event.target.closest('[data-question]');
+                if (!button || this.pending) return;
+                this.input.value = button.dataset.question || '';
+                this.resizeInput();
+                this.input.focus();
             });
             document.addEventListener('keydown', event => {
                 if (event.key === 'Escape' && !this.panel.hidden) this.close();
@@ -119,29 +148,61 @@
         }
 
         open() {
+            window.clearTimeout(this.closeTimer);
+            document.documentElement.classList.remove('thx-ai-sidebar-closing');
             this.panel.hidden = false;
             this.launcher.setAttribute('aria-expanded', 'true');
-            this.input.focus();
+            document.documentElement.classList.add('thx-ai-sidebar-open');
+            // 先让浏览器绘制隐藏态，再切到 open，确保首次打开也会执行过渡。
+            requestAnimationFrame(() => {
+                if (this.launcher.getAttribute('aria-expanded') !== 'true') return;
+                this.panel.classList.add('open');
+                this.input.focus({preventScroll: true});
+            });
         }
 
         close() {
-            this.panel.hidden = true;
+            if (this.panel.hidden) return;
+            window.clearTimeout(this.closeTimer);
+            this.panel.classList.remove('open');
             this.launcher.setAttribute('aria-expanded', 'false');
-            this.launcher.focus();
+            document.documentElement.classList.remove('thx-ai-sidebar-open');
+            document.documentElement.classList.add('thx-ai-sidebar-closing');
+            const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260;
+            this.closeTimer = window.setTimeout(() => {
+                this.panel.hidden = true;
+                document.documentElement.classList.remove('thx-ai-sidebar-closing');
+                this.launcher.focus({preventScroll: true});
+            }, duration);
         }
 
-        // 新会话 = 换一个新的 conversationId。服务端对每个编号保留独立模型记忆，
-        // 本地旧的 30 条消息也必须清掉，否则会与「新会话」的语义矛盾。
-        startNewConversation() {
-            this.reader?.cancel().catch(() => {});
-            this.reader = null;
-            this.pending = false;
-            this.messages = [];
-            this.conversationId = this.createConversationId();
-            this.persistState();
+        // 必须先等服务端确认释放旧模型记忆，再清空本地记录并换编号；失败时保留原会话，
+        // 防止界面看起来已经重置，服务端却继续积累不可见的历史。
+        async startNewConversation() {
+            if (this.pending || this.clearingConversation) return;
+            this.clearingConversation = true;
             this.updatePendingState();
-            this.renderMessages();
-            this.input.focus();
+            try {
+                const response = await fetch(
+                    `${apiBase}/api/public/v1/website/conversations/${encodeURIComponent(this.conversationId)}`,
+                    {method: 'DELETE'}
+                );
+                if (!response.ok) throw new Error('暂时无法清理旧会话，请稍后重试。');
+
+                this.messages = [];
+                this.conversationId = this.createConversationId();
+                this.persistState();
+                this.renderMessages();
+            } catch (error) {
+                console.error('网站助手清理会话失败', error);
+                this.messages.push({role: 'assistant', content: error.message});
+                this.persistState();
+                this.renderMessages();
+            } finally {
+                this.clearingConversation = false;
+                this.updatePendingState();
+                this.input.focus();
+            }
         }
 
         async sendCurrentMessage() {
@@ -149,6 +210,7 @@
             if (!message || this.pending) return;
 
             this.input.value = '';
+            this.resizeInput();
             this.messages.push({role: 'user', content: message});
             // 先渲染一个空的助手消息占位，SSE 文本片段到达后逐段追加，形成流式打字效果。
             const assistantMessage = {role: 'assistant', content: ''};
@@ -168,7 +230,9 @@
                 }
             } catch (error) {
                 console.error('网站助手请求失败', error);
-                assistantMessage.content = '网站助手暂时无法连接，请稍后再试。';
+                assistantMessage.content = error.status === 429
+                    ? '今天的访问比较多，请稍后再问，也可以直接使用首页搜索。'
+                    : error.message || '网站助手暂时无法连接，请稍后再试。';
             } finally {
                 this.pending = false;
                 this.reader = null;
@@ -188,7 +252,9 @@
                 body: JSON.stringify({conversationId: this.conversationId, message})
             });
             if (!response.ok) {
-                throw new Error(`接口返回 ${response.status}`);
+                const error = new Error(response.status === 429 ? '请求过于频繁' : '网站助手暂时不可用。');
+                error.status = response.status;
+                throw error;
             }
             if (!response.body) {
                 throw new Error('浏览器不支持流式响应');
@@ -234,7 +300,14 @@
             if (this.messages.length === 0) {
                 const empty = document.createElement('div');
                 empty.className = 'thx-ai-empty';
-                empty.innerHTML = '<span aria-hidden="true">👋</span><strong>你好！</strong><p>我可以介绍首页功能，并帮你找到对应入口。</p>';
+                const badge = document.createElement('span');
+                badge.setAttribute('aria-hidden', 'true');
+                badge.textContent = '✦';
+                const title = document.createElement('strong');
+                title.textContent = '你好，需要帮忙吗？';
+                const copy = document.createElement('p');
+                copy.textContent = this.welcomeMessage;
+                empty.append(badge, title, copy);
                 this.messagesElement.appendChild(empty);
                 return;
             }
@@ -248,21 +321,43 @@
         createMessageElement(message) {
             const element = document.createElement('div');
             element.className = `thx-ai-message thx-ai-message-${message.role}`;
-            element.textContent = message.content || (this.pending ? '思考中…' : '');
+            if (!message.content && this.pending && message === this.messages[this.messages.length - 1]) {
+                this.renderThinkingState(element);
+            } else {
+                element.textContent = message.content;
+            }
             return element;
         }
 
         updateLastAssistantMessage(content) {
             const elements = this.messagesElement.querySelectorAll('.thx-ai-message-assistant');
             const last = elements[elements.length - 1];
-            if (last) last.textContent = content || (this.pending ? '思考中…' : '');
+            if (last && content) {
+                last.classList.remove('thx-ai-thinking');
+                last.textContent = content;
+            } else if (last && this.pending) {
+                this.renderThinkingState(last);
+            }
             this.scrollToLatest();
         }
 
+        renderThinkingState(element) {
+            element.classList.add('thx-ai-thinking');
+            const label = document.createElement('span');
+            label.textContent = '客官请稍等';
+            const dots = document.createElement('span');
+            dots.className = 'thx-ai-thinking-dots';
+            dots.setAttribute('aria-hidden', 'true');
+            dots.append(document.createElement('i'), document.createElement('i'), document.createElement('i'));
+            element.replaceChildren(label, dots);
+        }
+
         updatePendingState() {
-            this.input.disabled = this.pending;
-            this.sendButton.disabled = this.pending;
-            this.sendButton.textContent = this.pending ? '等待' : '发送';
+            const controlsLocked = this.pending || this.clearingConversation;
+            this.input.disabled = controlsLocked;
+            this.sendButton.disabled = controlsLocked;
+            this.newButton.disabled = controlsLocked;
+            this.sendButton.classList.toggle('pending', this.pending);
         }
 
         scrollToLatest() {
@@ -277,6 +372,54 @@
             const dark = declaredTheme === 'dark'
                 || (!declaredTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
             this.dataset.theme = dark ? 'dark' : 'light';
+        }
+
+        resizeInput() {
+            this.input.style.height = 'auto';
+            this.input.style.height = `${Math.min(this.input.scrollHeight, 120)}px`;
+        }
+
+        // 组件加载的公开配置不包含后台规则和口令；失败时保留内置文案，不阻断对话。
+        async loadPublicConfiguration() {
+            try {
+                const response = await fetch(`${apiBase}/api/public/v1/website/configuration`);
+                if (!response.ok) return;
+                const configuration = await response.json();
+                this.assistantTitle = configuredTitle || configuration.assistantName || this.assistantTitle;
+                this.welcomeMessage = configuration.welcomeMessage || this.welcomeMessage;
+                this.shadowRoot.querySelector('.thx-ai-title').textContent = this.assistantTitle;
+                this.launcher.setAttribute('aria-label', `打开${this.assistantTitle}`);
+                this.panel.setAttribute('aria-label', this.assistantTitle);
+                this.launcher.hidden = configuration.enabled === false;
+                if (configuration.enabled === false && !this.panel.hidden) this.close();
+                this.renderMessages();
+            } catch (_) {
+                // 配置接口不可用时仍允许用户尝试对话，真实开关仍由服务端最终判定。
+            }
+        }
+
+        // 宿主页面只需加载一个脚本：桌面端打开时页面宽度让给右侧栏，
+        // 移动端锁定宿主滚动并由组件全屏接管，避免每个首页单独维护联动 CSS。
+        installHostLayoutStyle() {
+            if (document.getElementById(hostStyleId)) return;
+            const style = document.createElement('style');
+            style.id = hostStyleId;
+            style.textContent = `
+                @media (min-width: 769px) {
+                    html body { transition: width 260ms cubic-bezier(.22,1,.36,1) !important; }
+                    html body .top-actions { transition: right 260ms cubic-bezier(.22,1,.36,1) !important; }
+                    html body #stars, html body #particles { transition: width 260ms cubic-bezier(.22,1,.36,1) !important; }
+                    html.thx-ai-sidebar-open body { width: calc(100% - 420px) !important; }
+                    html.thx-ai-sidebar-open body .top-actions { right: 442px !important; }
+                    html.thx-ai-sidebar-open body #stars,
+                    html.thx-ai-sidebar-open body #particles { width: calc(100vw - 420px) !important; }
+                }
+                @media (max-width: 768px) {
+                    html.thx-ai-sidebar-open, html.thx-ai-sidebar-open body,
+                    html.thx-ai-sidebar-closing, html.thx-ai-sidebar-closing body { overflow: hidden !important; overscroll-behavior: none; }
+                }
+            `;
+            document.head.appendChild(style);
         }
 
         // 会话编号缺省时生成一个新的并持久化；隐私模式等场景 localStorage 不可用也不影响本次会话。

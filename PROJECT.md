@@ -25,8 +25,9 @@
 | `website` | 公开网站助手、来源限制、限流和网站知识 |
 | `blog` | 博客后台助手、精简查询工具、访问控制和对话内发布确认 |
 | `server` | 服务器、参数化命令与模型提供方配置，凭据加密、SSH 执行和危险命令确认 |
-| `static/widgets/website-assistant` | 可嵌入首页的助手组件 |
-| `static/blog/assistant` | 博客后台助手独立页面，沿用旧 ai-cms 视觉语言 |
+| `static/widgets/website-assistant` | 可嵌入首页的响应式对话组件 |
+| `static/website/assistant` | 口令保护的网站知识库与助手设置后台 |
+| `static/blog/assistant` | 博客后台助手独立页面，采用 ChatGPT 风格的统一助手后台视觉 |
 | `static/server/assistant` | 服务器助手独立页面、多服务器清单、全局模型设置、流式对话导航和对话内操作确认 |
 | `static/preview` | 组件本地视觉验证页面 |
 | `docs` | 架构和接入说明 |
@@ -41,7 +42,7 @@
 | `service` | 业务服务（对话编排、审批流、配置管理、外部客户端、SSH 执行） |
 | `model` | 请求/响应 DTO、内部实体记录和枚举 |
 | `config` | 配置属性（Properties）、Web 配置、拦截器和异常处理器 |
-| `repository`（仅 server） | JDBC 数据访问 |
+| `repository`（website/server） | JDBC 数据访问 |
 | `security`（仅 server） | 凭据加解密 |
 | `tool`（blog/server） | 暴露给模型的 Spring AI 工具 |
 
@@ -56,6 +57,7 @@
 5. SSH 凭据必须使用环境变量提供的主密钥加密后入库，任何读取接口不得返回明文凭据。
 6. 数据库表结构和初始化数据必须使用 Flyway 版本化迁移，禁止依赖自动建表或手工修改生产库。
 7. 不同助手、配置、命令、会话和审计记录按职责分表；禁止用一张通用表混装多个模块的数据。
+8. 所有助手后台统一采用 ChatGPT 风格的浅色中性视觉：浅灰侧栏、白色主区、黑色主按钮和克制的圆角阴影；新增后台不得另起一套品牌配色。
 
 ## 验证入口
 
@@ -67,6 +69,7 @@ $env:Path="$env:JAVA_HOME\bin;$env:Path"
 mvn test
 mvn package
 node --check src/main/resources/static/widgets/website-assistant/widget.js
+node --check src/main/resources/static/website/assistant/app.js
 node --check src/main/resources/static/blog/assistant/app.js
 node --check src/main/resources/static/server/assistant/app.js
 git diff --check
@@ -81,6 +84,8 @@ mvn spring-boot:run
 ```
 
 打开 `http://localhost:9900/preview/website-assistant.html`。
+网站助手后台为 `http://localhost:9900/website/assistant/`，需设置
+`WEBSITE_ASSISTANT_ACCESS_TOKEN`。
 
 博客助手页面为 `http://localhost:9900/blog/assistant/`，本地使用前必须设置
 `BLOG_ASSISTANT_ACCESS_TOKEN`；查询和发布还需配置博客系统 Agent API。
@@ -92,9 +97,12 @@ mvn spring-boot:run
 ## 易错点
 
 - 首页与 AI 平台通常跨域，生产环境必须通过 `WEBSITE_ASSISTANT_ALLOWED_ORIGINS` 精确配置首页来源。
+- 网站知识和展示设置由 Flyway 创建的独立表持久化；查询时只召回最相关的 8 条/6000 字符，不得恢复为全库每次注入。
+- 公开限流包含单 IP 分钟、单 IP 每日与全站每日三层内存配额；单实例重启会重置，多实例部署前必须改为共享存储。
 - 浏览器无法安全保管共享签名密钥；公开接口依靠精确来源限制、服务端限流和固定助手绑定保护。
 - 当前默认模型是本地 Ollama。页面验证不要求模型在线，但真实问答需要启动对应模型服务。
 - 首页只加载组件脚本。组件资源和交互逻辑应继续在本仓库维护，避免两个仓库出现不同版本。
+- 网站助手新建对话必须先同步清理旧 conversationId 的服务端模型记忆，收到成功响应后才能切换本地会话；流式回答期间禁止新建，避免清理后又被未结束请求写回。
 - 博客助手访问口令只保存在当前浏览器会话中；聊天记录保存在浏览器本地，不作为服务端审计记录。
 - 博客模型可调用精简只读工具并生成发布选项，但不能直接发布；用户必须在对应回复下点击“发布”，服务端才调用写入接口。
 - 服务器和命令持久化在各自职责表中；新服务器自动添加六个常用只读命令，已有服务器可以幂等补齐。

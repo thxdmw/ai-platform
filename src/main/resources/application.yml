@@ -24,7 +24,7 @@ spring:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
       chat:
         options:
-          model: ${OLLAMA_CHAT_MODEL:qwen3.5:9b}
+          model: ${OLLAMA_CHAT_MODEL:qwen3.5:4b}
           temperature: 0.2
     deepseek:
       api-key: ${DEEPSEEK_API_KEY:}
@@ -37,11 +37,15 @@ ai-platform:
   website:
     # 公开接口只能被明确列出的首页来源调用，多个来源通过逗号分隔。
     allowed-origins: ${WEBSITE_ASSISTANT_ALLOWED_ORIGINS:http://localhost:9900,http://localhost:8080,http://127.0.0.1:8080,https://thxdxw.cn}
-    requests-per-minute: ${WEBSITE_ASSISTANT_REQUESTS_PER_MINUTE:20}
+    # 后台口令不配置时禁止访问知识库与助手设置 API。
+    access-token: ${WEBSITE_ASSISTANT_ACCESS_TOKEN:123456}
+    requests-per-minute: ${WEBSITE_ASSISTANT_REQUESTS_PER_MINUTE:6}
+    requests-per-client-per-day: ${WEBSITE_ASSISTANT_REQUESTS_PER_CLIENT_PER_DAY:30}
+    requests-per-day: ${WEBSITE_ASSISTANT_REQUESTS_PER_DAY:300}
     sse-timeout: ${WEBSITE_ASSISTANT_SSE_TIMEOUT:90s}
   blog:
     # 博客助手只允许持有访问口令的管理员使用；生产环境不得留空。
-    access-token: ${BLOG_ASSISTANT_ACCESS_TOKEN:}
+    access-token: ${BLOG_ASSISTANT_ACCESS_TOKEN:123456}
     api-base-url: ${BLOG_API_BASE_URL:http://localhost:9090/agent/api/blog}
     api-key: ${BLOG_API_KEY:}
     connect-timeout: ${BLOG_API_CONNECT_TIMEOUT:5s}

@@ -17,7 +17,7 @@ public record WebsiteChatRequest(
         String conversationId,
 
         @NotBlank(message = "消息内容不能为空")
-        @Size(max = 500, message = "消息内容不能超过 500 个字符")
+        @Size(max = 300, message = "消息内容不能超过 300 个字符")
         String message
 ) {
 }

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>网站助手后台 · AI Platform</title>
+    <link rel="icon" href="/favicon.ico">
+    <link rel="stylesheet" href="./app.css">
+    <script src="./app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <a class="brand" href="/" aria-label="返回 AI 助手平台">
+            <span class="brand-mark">W</span>
+            <span><strong>网站助手</strong><small>AI Platform</small></span>
+        </a>
+        <nav class="nav-list" aria-label="后台导航">
+            <button class="nav-item active" type="button" data-view="knowledge">
+                <span class="nav-icon">◈</span><span>知识库</span><span id="knowledgeCount" class="nav-badge">0</span>
+            </button>
+            <button class="nav-item" type="button" data-view="settings">
+                <span class="nav-icon">⚙</span><span>助手设置</span>
+            </button>
+            <button class="nav-item" type="button" data-view="guide">
+                <span class="nav-icon">?</span><span>检索说明</span>
+            </button>
+        </nav>
+        <div class="sidebar-footer">
+            <a href="https://thxdxw.cn" target="_blank" rel="noreferrer">打开首页 <span>↗</span></a>
+            <button id="logoutButton" type="button">退出后台</button>
+        </div>
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <button id="mobileMenu" class="mobile-menu" type="button" aria-label="打开导航">☰</button>
+            <div><h1 id="viewTitle">知识库</h1><p id="viewSubtitle">管理助手可用于回答的网站资料</p></div>
+            <div class="topbar-actions">
+                <span id="serviceStatus" class="status-pill"><i></i>读取中</span>
+                <button id="addEntryButton" class="primary-button" type="button">+  新建知识</button>
+            </div>
+        </header>
+
+        <section id="knowledgeView" class="view active">
+            <div class="overview-grid">
+                <article class="metric-card"><span>全部条目</span><strong id="allCount">0</strong><small>资料与 FAQ</small></article>
+                <article class="metric-card"><span>已启用</span><strong id="enabledCount">0</strong><small>将参与检索</small></article>
+                <article class="metric-card accent"><span>FAQ</span><strong id="faqCount">0</strong><small>高精度标准答案</small></article>
+            </div>
+            <div class="toolbar">
+                <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="搜索标题、问题、内容或关键词"></label>
+                <div class="filter-group" role="group" aria-label="知识类型">
+                    <button class="filter active" type="button" data-filter="ALL">全部</button>
+                    <button class="filter" type="button" data-filter="INFO">资料</button>
+                    <button class="filter" type="button" data-filter="FAQ">FAQ</button>
+                </div>
+            </div>
+            <div id="knowledgeList" class="knowledge-list"></div>
+            <div id="emptyState" class="empty-state" hidden><span>◇</span><h2>还没有匹配的知识</h2><p>新建一条网站资料或 FAQ 吧。</p></div>
+        </section>
+
+        <section id="settingsView" class="view">
+            <form id="settingsForm" class="settings-card">
+                <div class="section-heading"><div><h2>对外展示</h2><p>保存后新打开的首页助手会立即读取。</p></div>
+                    <label class="switch-label"><input id="assistantEnabled" type="checkbox"><span class="switch"></span><em>对外开放</em></label>
+                </div>
+                <div class="form-grid">
+                    <label><span>助手名称</span><input id="assistantName" maxlength="80" required></label>
+                    <label class="wide"><span>欢迎语</span><textarea id="welcomeMessage" rows="3" maxlength="300" required></textarea><small><b id="welcomeLength">0</b>/300</small></label>
+                    <label class="wide"><span>补充回答规则</span><textarea id="promptAddition" rows="7" maxlength="4000" placeholder="例如：提到联系方式时，优先引导用户查看首页的联系卡片。"></textarea><small>这里只写站点特有规则，系统安全约束无法被覆盖。</small></label>
+                </div>
+                <div class="form-footer"><span id="settingsTime">尚未加载</span><button class="primary-button" type="submit">保存设置</button></div>
+            </form>
+        </section>
+
+        <section id="guideView" class="view">
+            <div class="guide-grid">
+                <article><span class="step">01</span><h2>先检索</h2><p>每次问答会根据标题、FAQ 问题、关键词和正文相似度，只取最相关的 8 条资料。</p></article>
+                <article><span class="step">02</span><h2>再生成</h2><p>检索结果作为受限参考资料交给模型，没有资料时要求它明确说不知道，降低编造风险。</p></article>
+                <article><span class="step">03</span><h2>FAQ 优先</h2><p>对收费、联系、地址、权限等需要准确口径的问题，使用 FAQ 并填写多个关键词。</p></article>
+                <article><span class="step">04</span><h2>何时上向量 RAG</h2><p>当条目超过约 100 条、需导入长文档，或用户问法与关键词差异很大时，再增加 Embedding + pgvector 混合召回。</p></article>
+            </div>
+        </section>
+    </main>
+</div>
+<div id="sidebarOverlay" class="sidebar-overlay"></div>
+
+<div id="entryModal" class="modal" hidden>
+    <form id="entryForm" class="modal-card">
+        <header><div><span id="entryEyebrow">新建知识</span><h2 id="entryTitle">添加网站资料</h2></div><button id="closeEntryModal" type="button" aria-label="关闭">×</button></header>
+        <div class="modal-body">
+            <div class="type-picker">
+                <label><input type="radio" name="entryType" value="INFO" checked><span><b>网站资料</b><small>项目、功能、入口与介绍</small></span></label>
+                <label><input type="radio" name="entryType" value="FAQ"><span><b>FAQ</b><small>固定问题与标准答案</small></span></label>
+            </div>
+            <label><span>标题</span><input id="entryName" maxlength="160" required placeholder="例如：博客入口"></label>
+            <label id="questionField" hidden><span>常见问题</span><input id="entryQuestion" maxlength="500" placeholder="例如：博客在哪里？"></label>
+            <label><span id="contentLabel">资料内容</span><textarea id="entryContent" rows="8" maxlength="12000" required placeholder="写清楚用户需要知道的事实。"></textarea></label>
+            <label><span>关键词</span><input id="entryKeywords" maxlength="500" placeholder="用逗号分隔，如：博客,文章,技术"></label>
+            <div class="inline-fields">
+                <label><span>优先级</span><input id="entryPriority" type="number" min="0" max="1000" value="50" required></label>
+                <label class="switch-label"><input id="entryEnabled" type="checkbox" checked><span class="switch"></span><em>立即启用</em></label>
+            </div>
+        </div>
+        <footer><button id="deleteEntryButton" class="danger-button" type="button" hidden>删除</button><span></span><button id="cancelEntryButton" class="secondary-button" type="button">取消</button><button class="primary-button" type="submit">保存知识</button></footer>
+    </form>
+</div>
+
+<div id="loginOverlay" class="login-overlay" hidden>
+    <form id="loginForm" class="login-card">
+        <div class="login-brand">W</div><p class="eyebrow">AI PLATFORM</p><h2>进入网站助手后台</h2>
+        <p>知识库和助手设置只对持有访问口令的管理员开放。</p>
+        <label for="accessToken">访问口令</label><input id="accessToken" type="password" autocomplete="current-password" required autofocus>
+        <p id="loginError" class="form-error" role="alert"></p><button class="primary-button" type="submit">验证并进入</button>
+    </form>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

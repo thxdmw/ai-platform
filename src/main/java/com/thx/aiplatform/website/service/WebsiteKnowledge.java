@@ -1,36 +1,111 @@
 package com.thx.aiplatform.website.service;
 
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.ResourceLoader;
+import com.thx.aiplatform.website.model.WebsiteKnowledgeEntry;
+import com.thx.aiplatform.website.repository.WebsiteKnowledgeRepository;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
- * 网站公开资料的唯一来源：启动时从 classpath 加载，内容整体注入网站助手的系统提示词，
- * 作为「只许按资料回答、不得编造」的约束依据。
- * <p>因此加载失败必须让应用直接启动失败（见构造器），不允许带着缺失的知识库带病运行——
- * 那等于让模型在一个没有约束的起点上自由发挥。</p>
+ * 网站知识的轻量检索器。它不把全库塞给模型，而是按标题、FAQ 问题、
+ * 关键词和正文的命中程度召回最相关的少量条目。对个人站点的小型知识库，
+ * 这比引入向量数据库更便宜、可解释，同时保留了 RAG「先检索再生成」的关键边界。
  */
 @Component
 public class WebsiteKnowledge {
 
-    private static final String KNOWLEDGE_LOCATION = "classpath:/knowledge/website.md";
+    private static final int MAX_ENTRIES = 8;
+    private static final int MAX_CONTEXT_CHARACTERS = 6_000;
 
-    private final String content;
+    private final WebsiteKnowledgeRepository repository;
 
-    public WebsiteKnowledge(ResourceLoader resourceLoader) {
-        Resource resource = resourceLoader.getResource(KNOWLEDGE_LOCATION);
-        try (var inputStream = resource.getInputStream()) {
-            this.content = new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (IOException exception) {
-            // 网站助手不能在缺少公开知识时带病启动，否则模型容易编造站点信息。
-            throw new IllegalStateException("无法加载网站助手知识：" + KNOWLEDGE_LOCATION, exception);
-        }
+    public WebsiteKnowledge(WebsiteKnowledgeRepository repository) {
+        this.repository = repository;
     }
 
-    public String content() {
-        return content;
+    public String contentFor(String query) {
+        String normalizedQuery = normalize(query);
+        Set<String> queryBigrams = bigrams(normalizedQuery);
+        List<ScoredEntry> scored = repository.findEnabled().stream()
+                .map(entry -> new ScoredEntry(entry, score(entry, normalizedQuery, queryBigrams)))
+                .sorted(Comparator.comparingInt(ScoredEntry::score).reversed()
+                        .thenComparing(Comparator.comparingInt(
+                                (ScoredEntry item) -> item.entry().priority()).reversed()))
+                .toList();
+
+        List<WebsiteKnowledgeEntry> selected = scored.stream()
+                .filter(item -> item.score() >= 8)
+                .limit(MAX_ENTRIES)
+                .map(ScoredEntry::entry)
+                .toList();
+        if (selected.isEmpty()) {
+            // 没有词面命中时仍给出两条高优先级站点概况，让模型能回答「这是什么网站」之类泛问题。
+            selected = scored.stream().limit(2).map(ScoredEntry::entry).toList();
+        }
+        return renderWithinBudget(selected);
+    }
+
+    private int score(WebsiteKnowledgeEntry entry, String query, Set<String> queryBigrams) {
+        String title = normalize(entry.title());
+        String question = normalize(entry.question());
+        String keywords = normalize(entry.keywords());
+        String content = normalize(entry.content());
+        int score = 0;
+        if (!query.isEmpty() && question.equals(query)) score += 120;
+        if (!query.isEmpty() && title.contains(query)) score += 50;
+        if (!query.isEmpty() && question.contains(query)) score += 60;
+        if (!query.isEmpty() && keywords.contains(query)) score += 45;
+        if (!query.isEmpty() && content.contains(query)) score += 25;
+        score += overlap(queryBigrams, bigrams(title + question)) * 5;
+        score += overlap(queryBigrams, bigrams(keywords)) * 4;
+        score += Math.min(overlap(queryBigrams, bigrams(content)), 12);
+        return score;
+    }
+
+    private int overlap(Set<String> left, Set<String> right) {
+        int count = 0;
+        for (String value : left) if (right.contains(value)) count++;
+        return count;
+    }
+
+    private Set<String> bigrams(String value) {
+        Set<String> values = new HashSet<>();
+        String compact = value.replaceAll("\\s+", "");
+        if (compact.length() == 1) values.add(compact);
+        for (int index = 0; index < compact.length() - 1; index++) {
+            values.add(compact.substring(index, index + 2));
+        }
+        return values;
+    }
+
+    private String renderWithinBudget(List<WebsiteKnowledgeEntry> entries) {
+        StringBuilder context = new StringBuilder();
+        for (WebsiteKnowledgeEntry entry : entries) {
+            String block = entry.entryType().name().equals("FAQ")
+                    ? "[FAQ] %s\n问：%s\n答：%s\n\n".formatted(entry.title(), entry.question(), entry.content())
+                    : "[资料] %s\n%s\n\n".formatted(entry.title(), entry.content());
+            int remaining = MAX_CONTEXT_CHARACTERS - context.length();
+            if (remaining <= 0) break;
+            if (block.length() > remaining) {
+                context.append(block, 0, remaining);
+                break;
+            }
+            context.append(block);
+        }
+        return context.isEmpty() ? "暂无可用的网站资料。" : context.toString().trim();
+    }
+
+    private String normalize(String value) {
+        if (value == null) return "";
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFKC).toLowerCase(Locale.ROOT);
+        return normalized.replaceAll("[\\p{P}\\p{S}\\s]+", "");
+    }
+
+    private record ScoredEntry(WebsiteKnowledgeEntry entry, int score) {
     }
 }

@@ -28,4 +28,21 @@ class WebsiteRateLimiterTest {
         assertThat(limiter.tryAcquire("127.0.0.1")).isFalse();
         assertThat(limiter.tryAcquire("127.0.0.2")).isTrue();
     }
+
+    @Test
+    void 单客户端每日配额不会误伤其他客户端() {
+        WebsiteAssistantProperties properties = new WebsiteAssistantProperties();
+        properties.setRequestsPerMinute(10);
+        properties.setRequestsPerClientPerDay(2);
+        properties.setRequestsPerDay(10);
+        WebsiteRateLimiter limiter = new WebsiteRateLimiter(
+                properties,
+                Clock.fixed(Instant.parse("2026-08-30T10:00:00Z"), ZoneOffset.UTC)
+        );
+
+        assertThat(limiter.tryAcquire("127.0.0.1")).isTrue();
+        assertThat(limiter.tryAcquire("127.0.0.1")).isTrue();
+        assertThat(limiter.tryAcquire("127.0.0.1")).isFalse();
+        assertThat(limiter.tryAcquire("127.0.0.2")).isTrue();
+    }
 }

@@ -16,7 +16,9 @@ import java.nio.charset.StandardCharsets;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -61,6 +63,17 @@ class WebsiteAssistantControllerTest {
                                 {"conversationId":"conversation-1","message":" "}
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void 新建对话前同步清理服务端模型记忆() throws Exception {
+        WebsiteAssistantService service = mock(WebsiteAssistantService.class);
+        MockMvc mockMvc = createMockMvc(service);
+
+        mockMvc.perform(delete("/api/public/v1/website/conversations/conversation-1"))
+                .andExpect(status().isNoContent());
+
+        verify(service).clear("conversation-1");
     }
 
     private MockMvc createMockMvc(WebsiteAssistantService service) {

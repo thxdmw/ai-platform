@@ -18,22 +18,25 @@ class WebsiteWebConfiguration implements WebMvcConfigurer {
 
     private final WebsiteAssistantProperties properties;
     private final WebsiteRateLimitInterceptor rateLimitInterceptor;
+    private final WebsiteAccessInterceptor accessInterceptor;
 
     WebsiteWebConfiguration(
             WebsiteAssistantProperties properties,
-            WebsiteRateLimitInterceptor rateLimitInterceptor
+            WebsiteRateLimitInterceptor rateLimitInterceptor,
+            WebsiteAccessInterceptor accessInterceptor
     ) {
         this.properties = properties;
         this.rateLimitInterceptor = rateLimitInterceptor;
+        this.accessInterceptor = accessInterceptor;
     }
 
-    // 只放行 POST 与 OPTIONS（预检）：该接口只接受 POST；精确枚举 allowedOrigins 而非 *，
+    // 配置读取需要 GET，对话需要 POST，新建对话前用 DELETE 清理旧记忆，OPTIONS 用于跨域预检；精确枚举 allowedOrigins 而非 *，
     // 是「公开但只面向指定站点」的安全取舍——放弃通配的便利，换来可控的暴露面。
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping(API_PATH)
                 .allowedOrigins(properties.getAllowedOrigins().toArray(String[]::new))
-                .allowedMethods("POST", "OPTIONS")
+                .allowedMethods("GET", "POST", "DELETE", "OPTIONS")
                 .allowedHeaders("Content-Type")
                 .allowCredentials(false)
                 .maxAge(3600);
@@ -42,5 +45,6 @@ class WebsiteWebConfiguration implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(rateLimitInterceptor).addPathPatterns(API_PATH);
+        registry.addInterceptor(accessInterceptor).addPathPatterns("/api/website/v1/**");
     }
 }

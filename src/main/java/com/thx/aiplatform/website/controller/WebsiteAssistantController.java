@@ -7,6 +7,9 @@ import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +20,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 /**
  * 网站助手公开接口（/api/public/v1/website/**），无鉴权，安全依赖三层防线：
@@ -34,6 +38,7 @@ public class WebsiteAssistantController {
     private static final String EMPTY_ANSWER = "抱歉，我暂时无法回答这个问题，请换个问法再试。";
     private static final String UNAVAILABLE_ANSWER = "抱歉，网站助手暂时不可用，请稍后重试。";
     private static final MediaType UTF8_TEXT = new MediaType("text", "plain", StandardCharsets.UTF_8);
+    private static final Pattern CONVERSATION_ID = Pattern.compile("[A-Za-z0-9_-]{1,80}");
 
     private final WebsiteAssistantService assistantService;
     private final WebsiteAssistantProperties properties;
@@ -71,6 +76,17 @@ public class WebsiteAssistantController {
                 () -> terminate(emitter, terminated, contentLength.get() == 0 ? EMPTY_ANSWER : null)
         );
         return emitter;
+    }
+
+    // 新建对话前由浏览器同步调用，先释放旧 conversationId 对应的模型记忆；
+    // 助手编号仍由服务端固定，避免公开接口越权影响博客或服务器助手。
+    @DeleteMapping("/conversations/{conversationId}")
+    public ResponseEntity<Void> clearConversation(@PathVariable String conversationId) {
+        if (!CONVERSATION_ID.matcher(conversationId).matches()) {
+            throw new IllegalArgumentException("会话编号格式不正确");
+        }
+        assistantService.clear(conversationId);
+        return ResponseEntity.noContent().build();
     }
 
     // terminated 一旦置位立即停止转发：SSE 连接已结束或正走向结束，此时继续 send 只会抛异常；

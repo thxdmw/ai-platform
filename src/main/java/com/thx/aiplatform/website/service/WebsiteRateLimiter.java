@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,6 +24,8 @@ public class WebsiteRateLimiter {
     private static final int CLEANUP_INTERVAL = 512;
 
     private final Map<String, WindowCounter> counters = new ConcurrentHashMap<>();
+    private final Map<String, DayCounter> dailyCounters = new ConcurrentHashMap<>();
+    private DayCounter globalDailyCounter = new DayCounter(LocalDate.MIN, 0);
     private final AtomicInteger requestsSinceCleanup = new AtomicInteger();
     private final WebsiteAssistantProperties properties;
     private final Clock clock;
@@ -47,20 +50,44 @@ public class WebsiteRateLimiter {
             }
             return new WindowCounter(currentWindow, existing.count() + 1);
         });
-        cleanupIfNecessary(currentWindow);
-        return counter.count() <= properties.getRequestsPerMinute();
+        LocalDate today = LocalDate.now(clock);
+        if (counter.count() > properties.getRequestsPerMinute()) {
+            cleanupIfNecessary(currentWindow, today);
+            return false;
+        }
+        DayCounter dailyCounter = dailyCounters.compute(clientId, (key, existing) -> increment(existing, today));
+        if (dailyCounter.count() > properties.getRequestsPerClientPerDay()) {
+            cleanupIfNecessary(currentWindow, today);
+            return false;
+        }
+        DayCounter globalCounter;
+        synchronized (this) {
+            globalDailyCounter = increment(globalDailyCounter, today);
+            globalCounter = globalDailyCounter;
+        }
+        cleanupIfNecessary(currentWindow, today);
+        return globalCounter.count() <= properties.getRequestsPerDay();
     }
 
     // 按请求次数惰性清理而不是跑定时任务，省掉一个调度线程；每 512 次清一次是
     // 「计数短暂虚高可接受、内存不随客户端数量无限增长」之间的取舍。
-    private void cleanupIfNecessary(long currentWindow) {
+    private DayCounter increment(DayCounter existing, LocalDate today) {
+        if (existing == null || !existing.day().equals(today)) return new DayCounter(today, 1);
+        return new DayCounter(today, existing.count() + 1);
+    }
+
+    private void cleanupIfNecessary(long currentWindow, LocalDate today) {
         if (requestsSinceCleanup.incrementAndGet() < CLEANUP_INTERVAL) {
             return;
         }
         requestsSinceCleanup.set(0);
         counters.entrySet().removeIf(entry -> entry.getValue().window() < currentWindow - 1);
+        dailyCounters.entrySet().removeIf(entry -> entry.getValue().day().isBefore(today));
     }
 
     private record WindowCounter(long window, int count) {
+    }
+
+    private record DayCounter(LocalDate day, int count) {
     }
 }

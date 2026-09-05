@@ -16,7 +16,13 @@ public class WebsiteAssistantProperties {
 
     private List<String> allowedOrigins = new ArrayList<>();
 
-    private int requestsPerMinute = 20;
+    private String accessToken = "";
+
+    private int requestsPerMinute = 6;
+
+    private int requestsPerClientPerDay = 30;
+
+    private int requestsPerDay = 300;
 
     private Duration sseTimeout = Duration.ofSeconds(90);
 
@@ -31,6 +37,30 @@ public class WebsiteAssistantProperties {
 
     public int getRequestsPerMinute() {
         return requestsPerMinute;
+    }
+
+    public String getAccessToken() {
+        return accessToken;
+    }
+
+    public void setAccessToken(String accessToken) {
+        this.accessToken = accessToken == null ? "" : accessToken.trim();
+    }
+
+    public int getRequestsPerClientPerDay() {
+        return requestsPerClientPerDay;
+    }
+
+    public void setRequestsPerClientPerDay(int requestsPerClientPerDay) {
+        this.requestsPerClientPerDay = positive(requestsPerClientPerDay, "单客户端每日请求数");
+    }
+
+    public int getRequestsPerDay() {
+        return requestsPerDay;
+    }
+
+    public void setRequestsPerDay(int requestsPerDay) {
+        this.requestsPerDay = positive(requestsPerDay, "全站每日请求数");
     }
 
     // 配额为 0 或负数等于关停接口，几乎必然是配置笔误；在设置时就抛错（fail-fast），
@@ -52,5 +82,10 @@ public class WebsiteAssistantProperties {
             throw new IllegalArgumentException("SSE 超时时间必须大于 0");
         }
         this.sseTimeout = sseTimeout;
+    }
+
+    private int positive(int value, String name) {
+        if (value < 1) throw new IllegalArgumentException(name + "必须大于 0");
+        return value;
     }
 }
