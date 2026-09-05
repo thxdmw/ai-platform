@@ -1,8 +1,7 @@
-package com.thx.aiplatform.website.repository;
+package com.thx.aiplatform.website.service;
 
 import com.thx.aiplatform.website.dto.WebsiteKnowledgeEntryRequest;
 import com.thx.aiplatform.website.enums.WebsiteKnowledgeEntryType;
-import com.thx.aiplatform.website.service.WebsiteKnowledgeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -13,7 +12,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /** 知识库持久化回归测试，覆盖后台会执行的完整增删改链路。 */
 @SpringBootTest
 @Transactional
-class WebsiteKnowledgeRepositoryTest {
+class WebsiteKnowledgeServiceTest {
 
     @Autowired
     private WebsiteKnowledgeService repository;
